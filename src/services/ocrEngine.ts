@@ -282,56 +282,6 @@ export const parsePrescriptionClient = async (
     }
   }
 
-  // 4. Default fallback if file is an unreadable scanned bitmap
-  if (extractedMedicines.length === 0) {
-    extractedMedicines.push(
-      {
-        id: 'med-1',
-        name: 'Omeprazole',
-        strength: '20mg',
-        dose: '1 tablet',
-        frequency: 'Once daily (Morning)',
-        timing: 'Take 30 min before breakfast',
-        duration_days: 5,
-        confidence: 0.99,
-        needs_review: false,
-      },
-      {
-        id: 'med-2',
-        name: 'Amoxicillin',
-        strength: '500mg',
-        dose: '1 capsule',
-        frequency: 'Once daily (Morning)',
-        timing: 'After food',
-        duration_days: 5,
-        confidence: 0.99,
-        needs_review: false,
-      },
-      {
-        id: 'med-3',
-        name: 'Zerodol-P',
-        strength: '500mg',
-        dose: '1 tablet',
-        frequency: 'Once daily (Morning)',
-        timing: 'After food',
-        duration_days: 5,
-        confidence: 0.99,
-        needs_review: false,
-      },
-      {
-        id: 'med-4',
-        name: 'Aspirin',
-        strength: '250mg',
-        dose: '1 tablet',
-        frequency: 'Twice daily',
-        timing: 'After food',
-        duration_days: 3,
-        confidence: 0.99,
-        needs_review: false,
-      }
-    );
-  }
-
   const ambiguousCount = extractedMedicines.filter((m) => m.needs_review).length;
 
   return {
@@ -339,7 +289,9 @@ export const parsePrescriptionClient = async (
     date: new Date().toISOString().split('T')[0],
     medicines: extractedMedicines,
     ambiguousCount,
-    notes: `Prescription OCR extracted all ${extractedMedicines.length} medicine instruction(s).`,
+    notes: extractedMedicines.length > 0 
+      ? `Prescription OCR extracted ${extractedMedicines.length} medicine instruction(s).`
+      : 'No medicines detected in uploaded document.',
   };
 };
 
@@ -638,53 +590,15 @@ export const parseLabReportClient = async (
     } // end for (unit of unitList)
   } // end for (line of lines)
 
-  // 4. Comprehensive fallback: 20 realistic biomarkers across all major health categories.
-  //    Shown when uploaded PDF is a scanned bitmap and text cannot be extracted.
-  if (testResults.length === 0) {
-    testResults.push(
-      // Complete Blood Count (CBC)
-      { id: 'tr-01', testName: 'Haemoglobin',                  value: 10.2,  unit: 'g/dL',        referenceRange: '12.0 - 15.0',   category: 'Complete Blood Count', isAbnormal: true  },
-      { id: 'tr-02', testName: 'Total Leukocyte Count (WBC)',   value: 6800,  unit: '/cumm',        referenceRange: '4000 - 11000',  category: 'Complete Blood Count', isAbnormal: false },
-      { id: 'tr-03', testName: 'Platelet Count',                value: 2.4,   unit: 'lakhs/cumm',   referenceRange: '1.5 - 4.5',     category: 'Complete Blood Count', isAbnormal: false },
-      { id: 'tr-04', testName: 'Total RBC Count',               value: 4.1,   unit: 'million/cumm', referenceRange: '3.9 - 4.8',     category: 'Complete Blood Count', isAbnormal: false },
-      { id: 'tr-05', testName: 'Mean Corpuscular Volume (MCV)', value: 75.0,  unit: 'fL',           referenceRange: '83.0 - 101.0',  category: 'Complete Blood Count', isAbnormal: true  },
-      { id: 'tr-06', testName: 'MCH',                           value: 21.3,  unit: 'Pg',           referenceRange: '27.0 - 32.0',   category: 'Complete Blood Count', isAbnormal: true  },
-
-      // Diabetes Panel
-      { id: 'tr-07', testName: 'Fasting Blood Sugar (Glucose)', value: 118.0, unit: 'mg/dL',        referenceRange: '70.0 - 99.0',   category: 'Diabetes',             isAbnormal: true  },
-      { id: 'tr-08', testName: 'HbA1c (Glycated Haemoglobin)', value: 6.4,   unit: '%',             referenceRange: '4.0 - 5.6',     category: 'Diabetes',             isAbnormal: true  },
-      { id: 'tr-09', testName: 'Post-Prandial Blood Sugar',     value: 142.0, unit: 'mg/dL',        referenceRange: '< 140.0',       category: 'Diabetes',             isAbnormal: true  },
-
-      // Lipid Profile
-      { id: 'tr-10', testName: 'Total Cholesterol',             value: 210.0, unit: 'mg/dL',        referenceRange: '< 200.0',       category: 'Lipid Profile',        isAbnormal: true  },
-      { id: 'tr-11', testName: 'LDL Cholesterol',               value: 138.0, unit: 'mg/dL',        referenceRange: '< 100.0',       category: 'Lipid Profile',        isAbnormal: true  },
-      { id: 'tr-12', testName: 'HDL Cholesterol',               value: 48.0,  unit: 'mg/dL',        referenceRange: '> 40.0',        category: 'Lipid Profile',        isAbnormal: false },
-      { id: 'tr-13', testName: 'Triglycerides',                 value: 168.0, unit: 'mg/dL',        referenceRange: '< 150.0',       category: 'Lipid Profile',        isAbnormal: true  },
-
-      // Liver Function
-      { id: 'tr-14', testName: 'SGPT (ALT)',                    value: 52.0,  unit: 'U/L',          referenceRange: '7.0 - 40.0',    category: 'Liver Function',       isAbnormal: true  },
-      { id: 'tr-15', testName: 'SGOT (AST)',                    value: 34.0,  unit: 'U/L',          referenceRange: '10.0 - 40.0',   category: 'Liver Function',       isAbnormal: false },
-
-      // Kidney Function
-      { id: 'tr-16', testName: 'Serum Creatinine',              value: 1.0,   unit: 'mg/dL',        referenceRange: '0.6 - 1.2',     category: 'Kidney Function',      isAbnormal: false },
-      { id: 'tr-17', testName: 'Blood Urea Nitrogen (BUN)',     value: 18.0,  unit: 'mg/dL',        referenceRange: '7.0 - 25.0',    category: 'Kidney Function',      isAbnormal: false },
-
-      // Thyroid
-      { id: 'tr-18', testName: 'TSH (Thyroid Stimulating)',     value: 3.2,   unit: 'uIU/mL',       referenceRange: '0.5 - 5.0',     category: 'Thyroid',              isAbnormal: false },
-
-      // Vitamins
-      { id: 'tr-19', testName: 'Vitamin D (25-OH)',             value: 18.5,  unit: 'ng/mL',        referenceRange: '30.0 - 100.0',  category: 'Vitamins',             isAbnormal: true  },
-      { id: 'tr-20', testName: 'Vitamin B12',                   value: 310.0, unit: 'pg/mL',        referenceRange: '200.0 - 900.0', category: 'Vitamins',             isAbnormal: false }
-    );
-  }
-
   return {
     id: 'rep-' + Math.random().toString(36).substr(2, 6),
     filename,
     labName,
     reportDate: new Date().toISOString().split('T')[0],
     testResults,
-    summary: `Extracted ${testResults.length} biomarker(s). ${testResults.filter((t) => t.isAbnormal).length} parameter(s) flagged as abnormal.`,
+    summary: testResults.length > 0 
+      ? `Extracted ${testResults.length} biomarker(s) directly from report. ${testResults.filter((t) => t.isAbnormal).length} parameter(s) flagged as abnormal.`
+      : 'No biomarkers could be automatically read from this document.',
     uploadedAt: new Date().toISOString(),
   };
 };

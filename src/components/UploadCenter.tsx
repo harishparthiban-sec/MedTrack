@@ -463,11 +463,25 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
               Verify & Edit Extracted Biomarkers ({parsedReport.testResults.length}):
             </h4>
 
-            {parsedReport.testResults.map((t, idx) => (
-              <div
-                key={t.id || idx}
-                className="p-4 rounded-2xl bg-slate-50 dark:bg-[#031f17] border border-slate-200 dark:border-emerald-900/30 space-y-3"
-              >
+            {parsedReport.testResults.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-slate-50 dark:bg-[#031f17] border border-dashed border-slate-300 dark:border-emerald-900/40 text-center space-y-3">
+                <p className="text-xs font-semibold text-slate-500 dark:text-emerald-200/70">
+                  No biomarker rows could be automatically detected from this document.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleAddCustomBiomarker}
+                  className="px-4 py-2 rounded-xl btn-primary-visible text-xs font-extrabold cursor-pointer"
+                >
+                  + Add Biomarker Manually
+                </button>
+              </div>
+            ) : (
+              parsedReport.testResults.map((t, idx) => (
+                <div
+                  key={t.id || idx}
+                  className="p-4 rounded-2xl bg-slate-50 dark:bg-[#031f17] border border-slate-200 dark:border-emerald-900/30 space-y-3"
+                >
                 <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 text-xs font-bold items-center">
                   {/* Test Name */}
                   <div className="sm:col-span-2">
@@ -536,7 +550,7 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
                   </div>
                 </div>
               </div>
-            ))}
+            )))}
           </div>
 
           <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-emerald-900/30">
