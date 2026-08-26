@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, FileText } from 'lucide-react';
 import type { Prescription, MedicineScheduleItem, MedicalReport, ExtractedMedicine, ExtractedTestResult } from '../types';
-import { parsePrescriptionClient, generateSchedulesFromMedicines, parseLabReportClient, extractTextFromPdfFile } from '../services/ocrEngine';
+import { parsePrescriptionClient, generateSchedulesFromMedicines, parseLabReportClient, extractTextFromPdfFile, recognizeImageText } from '../services/ocrEngine';
 
 interface UploadCenterProps {
   onPrescriptionConfirmed: (rx: Prescription, schedules: MedicineScheduleItem[]) => void;
@@ -48,6 +48,17 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
         textToParse = await selectedFile.text();
       } catch {
         textToParse = customText;
+      }
+    }
+    // 3. If file is an Image (PNG, JPG, JPEG, WEBP) -> Run in-browser Optical Character Recognition
+    else if (selectedFile.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(selectedFile.name)) {
+      try {
+        const ocrText = await recognizeImageText(selectedFile);
+        if (ocrText && ocrText.length > 5) {
+          textToParse = ocrText;
+        }
+      } catch (err) {
+        console.error('Image OCR error:', err);
       }
     }
 

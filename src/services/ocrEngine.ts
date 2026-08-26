@@ -1,6 +1,23 @@
 import type { ExtractedMedicine, MedicineScheduleItem, ExtractedTestResult, MedicalReport } from '../types';
 
 /**
+ * In-browser Image Optical Character Recognition (OCR) using Tesseract.js
+ * Extracts raw text from scanned photos, screenshots, PNG, JPG, and WEBP documents.
+ */
+export const recognizeImageText = async (file: File): Promise<string> => {
+  try {
+    const { createWorker } = await import('tesseract.js');
+    const worker = await createWorker('eng');
+    const ret = await worker.recognize(file);
+    await worker.terminate();
+    return ret.data.text || '';
+  } catch (err) {
+    console.error('Tesseract OCR recognition error:', err);
+    return '';
+  }
+};
+
+/**
  * Browser-native PDF text stream extractor (supports compressed & uncompressed streams)
  */
 export const extractTextFromPdfFile = async (file: File): Promise<string> => {
