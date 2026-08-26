@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, FileText } from 'lucide-react';
 import type { Prescription, MedicineScheduleItem, MedicalReport, ExtractedMedicine } from '../types';
-import { parsePrescriptionClient, generateSchedulesFromMedicines, parseLabReportClient } from '../services/ocrEngine';
+import { parsePrescriptionClient, generateSchedulesFromMedicines, parseLabReportClient, extractTextFromPdfFile } from '../services/ocrEngine';
 
 interface UploadCenterProps {
   onPrescriptionConfirmed: (rx: Prescription, schedules: MedicineScheduleItem[]) => void;
@@ -33,18 +33,24 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
     if (activeType === 'prescription') {
       let textToParse = customText;
       
-      // If file is text-based (.txt, .md, .csv)
-      if (selectedFile.type.includes('text') || selectedFile.name.endsWith('.txt')) {
+      // 1. If file is a PDF, extract the embedded text streams
+      if (selectedFile.name.toLowerCase().endsWith('.pdf') || selectedFile.type === 'application/pdf') {
+        try {
+          const pdfText = await extractTextFromPdfFile(selectedFile);
+          if (pdfText && pdfText.length > 5) {
+            textToParse = pdfText;
+          }
+        } catch (err) {
+          console.error('PDF extraction failed:', err);
+        }
+      }
+      // 2. If file is text-based (.txt, .md, .csv)
+      else if (selectedFile.type.includes('text') || selectedFile.name.endsWith('.txt')) {
         try {
           textToParse = await selectedFile.text();
         } catch {
-          textToParse = customText || selectedFile.name;
+          textToParse = customText;
         }
-      }
-
-      if (!textToParse) {
-        textToParse = `Dr. A. Sharma, MD
-1. ${selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')} 500mg - 1 tablet twice daily after meals for 5 days.`;
       }
 
       const parsedData = await parsePrescriptionClient(textToParse, selectedFile.name);
