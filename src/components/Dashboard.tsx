@@ -25,6 +25,7 @@ import type {
   AdherenceLog,
   Prescription,
   HealthComparisonReport,
+  MedicalReport,
 } from '../types';
 
 interface DashboardProps {
@@ -32,6 +33,7 @@ interface DashboardProps {
   schedules: MedicineScheduleItem[];
   adherenceLogs: AdherenceLog[];
   prescriptions: Prescription[];
+  reports?: MedicalReport[];
   comparisonReport?: HealthComparisonReport | null;
   setActiveTab: (tab: string) => void;
   onLogAction: (scheduleId: string, status: 'taken' | 'ignored') => void;
@@ -43,6 +45,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   schedules,
   adherenceLogs,
   prescriptions,
+  reports = [],
   setActiveTab,
   onLogAction,
   theme,
@@ -50,13 +53,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const todayStr = new Date().toISOString().split('T')[0];
   const isDark = theme === 'dark';
 
-  // Adherence Calculations
+  // Adherence Calculations (Deduplicated strictly to active schedules)
   const activeSchedules = schedules.filter((s) => s.active);
-  const todayLogs = adherenceLogs.filter((l) => l.date === todayStr);
-  const takenTodayCount = todayLogs.filter((l) => l.status === 'taken').length;
+  const activeScheduleIds = new Set(activeSchedules.map((s) => s.id));
+  const todayLogs = adherenceLogs.filter(
+    (l) => l.date === todayStr && activeScheduleIds.has(l.scheduleId)
+  );
+
+  const takenScheduleIds = new Set(
+    todayLogs.filter((l) => l.status === 'taken').map((l) => l.scheduleId)
+  );
+  const takenTodayCount = takenScheduleIds.size;
   const totalToday = activeSchedules.length;
   const adherencePercentage =
-    totalToday > 0 ? Math.round((takenTodayCount / totalToday) * 100) : 100;
+    totalToday > 0 ? Math.min(100, Math.round((takenTodayCount / totalToday) * 100)) : 100;
 
   // Next Dose Logic
   const loggedScheduleIds = new Set(todayLogs.map((l) => l.scheduleId));
@@ -88,55 +98,57 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const iconBoxBg = isDark ? 'bg-emerald-900/40 border-emerald-800/50' : 'bg-slate-100 border-slate-200';
   const iconColor = isDark ? 'text-emerald-400' : 'text-emerald-600';
+  const quickNavBg = isDark
+    ? 'bg-[#031f17] hover:bg-emerald-950 border-emerald-900/30 text-emerald-100'
+    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800';
 
   const navLinkCls = isDark
     ? 'text-emerald-400 hover:text-emerald-300'
     : 'text-emerald-600 hover:text-emerald-700';
 
-  const quickNavBg = isDark
-    ? 'bg-[#031f17] hover:bg-emerald-950 border-emerald-900/30 text-emerald-100'
-    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800';
-
   const borderDivider = isDark ? 'border-emerald-900/30' : 'border-slate-200';
 
   return (
-    <div className="space-y-8 pb-16 pt-2 max-w-7xl mx-auto">
+    <div className="space-y-8 pb-16 pt-2">
+      
+      {/* 1. Hero Welcome Banner */}
+      <div className="relative overflow-hidden rounded-3xl p-7 sm:p-10 shadow-2xl transition-all duration-300">
+        
+        {/* Subtle Background Gradient Overlay */}
+        <div 
+          className={`absolute inset-0 transition-all duration-300 ${
+            isDark 
+              ? 'bg-gradient-to-r from-emerald-950 via-[#063b2c] to-[#04241b] border border-emerald-800/40 shadow-emerald-950/40' 
+              : 'bg-gradient-to-r from-emerald-100 via-teal-50 to-emerald-50/80 border border-emerald-200 shadow-emerald-500/10'
+          }`}
+        />
 
-      {/* 1. Hero Banner */}
-      <div
-        className={`hero-banner relative overflow-hidden rounded-3xl p-6 sm:p-10 ${
-          isDark
-            ? 'border border-emerald-900/50 shadow-2xl'
-            : 'border border-emerald-200/80 shadow-md shadow-emerald-500/5'
-        }`}
-        style={{
-          background: isDark
-            ? 'linear-gradient(135deg, #031f17 0%, #042f1e 55%, #064e3b 100%)'
-            : 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #e0f2fe 100%)',
-        }}
-      >
-        <div
-          className={`absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 rounded-full blur-3xl pointer-events-none ${
+        {/* Ambient Glow Orbs */}
+        <div 
+          className={`absolute -top-24 -right-24 w-80 h-80 rounded-full blur-3xl pointer-events-none transition-all duration-300 ${
             isDark ? 'bg-emerald-500/10' : 'bg-emerald-400/20'
+          }`}
+        />
+        <div 
+          className={`absolute -bottom-24 -left-24 w-80 h-80 rounded-full blur-3xl pointer-events-none transition-all duration-300 ${
+            isDark ? 'bg-teal-500/10' : 'bg-teal-300/25'
           }`}
         />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span
-                className={`px-3.5 py-1 rounded-full text-xs font-extrabold border ${
-                  isDark
-                    ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
-                    : 'bg-emerald-600/15 border-emerald-600/30 text-emerald-900'
-                }`}
-              >
-                {greeting}, {user?.name.split(' ')[0] || 'User'}! 👋
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-extrabold border ${
+                isDark 
+                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' 
+                  : 'bg-emerald-600/10 border-emerald-600/30 text-emerald-800'
+              }`}>
+                {greeting}, {user?.name || 'Patient'}
               </span>
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-bold border ${
+              <span 
+                className={`text-xs font-semibold px-3 py-1 rounded-full border ${
                   isDark
-                    ? 'bg-white/10 border-white/10 text-white/80'
+                    ? 'bg-black/30 border-white/10 text-emerald-200/90'
                     : 'bg-white/90 border-slate-200 text-slate-700 shadow-sm'
                 }`}
               >
@@ -187,7 +199,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span className={`text-xs font-extrabold uppercase tracking-wider block ${labelText}`}>Today's Adherence</span>
             <div className={`text-3xl font-extrabold ${titleText}`}>{adherencePercentage}%</div>
             <span className="text-[11px] font-extrabold text-emerald-500 block">
-              {takenTodayCount} of {totalToday} Doses Taken
+              {totalToday === 0 ? 'No Doses Scheduled' : `${takenTodayCount} of ${totalToday} Doses Taken`}
             </span>
           </div>
 
@@ -213,7 +225,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="space-y-1">
             <span className={`text-xs font-extrabold uppercase tracking-wider block ${labelText}`}>Adherence Streak</span>
             <div className={`text-3xl font-extrabold flex items-center ${titleText}`}>
-              {user?.streakDays || 7} <span className="text-amber-500 text-xl ml-1">Days</span>
+              {user?.streakDays ?? 1} <span className="text-amber-500 text-xl ml-1">Days</span>
             </div>
             <span className="text-[11px] font-extrabold text-amber-500 block">🔥 Perfect Consistency</span>
           </div>
@@ -226,8 +238,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className={`rounded-3xl p-6 flex items-center justify-between border ${cardBg}`}>
           <div className="space-y-1">
             <span className={`text-xs font-extrabold uppercase tracking-wider block ${labelText}`}>Prescriptions Active</span>
-            <div className={`text-3xl font-extrabold ${titleText}`}>{prescriptions.length || 2}</div>
-            <span className="text-[11px] font-extrabold text-cyan-500 block">📄 Parsed via AI OCR</span>
+            <div className={`text-3xl font-extrabold ${titleText}`}>{prescriptions.length}</div>
+            <span className="text-[11px] font-extrabold text-cyan-500 block">📄 {prescriptions.length === 1 ? 'Prescription' : 'Prescriptions'} Active</span>
           </div>
           <div className="w-14 h-14 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-500">
             <FileText className="w-7 h-7" />
@@ -238,7 +250,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className={`rounded-3xl p-6 flex items-center justify-between border ${cardBg}`}>
           <div className="space-y-1">
             <span className={`text-xs font-extrabold uppercase tracking-wider block ${labelText}`}>Lab Reports</span>
-            <div className={`text-3xl font-extrabold ${titleText}`}>2 Reports</div>
+            <div className={`text-3xl font-extrabold ${titleText}`}>{reports.length} {reports.length === 1 ? 'Report' : 'Reports'}</div>
             <span className="text-[11px] font-extrabold text-indigo-500 block">📊 Biomarkers Compared</span>
           </div>
           <div className="w-14 h-14 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-500">

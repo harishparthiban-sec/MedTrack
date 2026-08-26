@@ -240,6 +240,7 @@ export function App() {
             schedules={schedules}
             adherenceLogs={adherenceLogs}
             prescriptions={prescriptions}
+            reports={reports}
             setActiveTab={setActiveTab}
             onLogAction={handleLogAction}
             theme={theme}
