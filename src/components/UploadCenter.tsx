@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Upload, CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, FileText } from 'lucide-react';
-import type { Prescription, MedicineScheduleItem, MedicalReport, ExtractedMedicine } from '../types';
+import type { Prescription, MedicineScheduleItem, MedicalReport, ExtractedMedicine, ExtractedTestResult } from '../types';
 import { parsePrescriptionClient, generateSchedulesFromMedicines, parseLabReportClient, extractTextFromPdfFile } from '../services/ocrEngine';
 
 interface UploadCenterProps {
@@ -29,30 +29,29 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
 
   const handleProcessFile = async (selectedFile: File) => {
     setParsing(true);
+    let textToParse = customText;
+
+    // 1. If file is a PDF, extract embedded text streams
+    if (selectedFile.name.toLowerCase().endsWith('.pdf') || selectedFile.type === 'application/pdf') {
+      try {
+        const pdfText = await extractTextFromPdfFile(selectedFile);
+        if (pdfText && pdfText.length > 5) {
+          textToParse = pdfText;
+        }
+      } catch (err) {
+        console.error('PDF extraction error:', err);
+      }
+    }
+    // 2. If file is text-based (.txt, .md, .csv)
+    else if (selectedFile.type.includes('text') || selectedFile.name.endsWith('.txt')) {
+      try {
+        textToParse = await selectedFile.text();
+      } catch {
+        textToParse = customText;
+      }
+    }
 
     if (activeType === 'prescription') {
-      let textToParse = customText;
-      
-      // 1. If file is a PDF, extract the embedded text streams
-      if (selectedFile.name.toLowerCase().endsWith('.pdf') || selectedFile.type === 'application/pdf') {
-        try {
-          const pdfText = await extractTextFromPdfFile(selectedFile);
-          if (pdfText && pdfText.length > 5) {
-            textToParse = pdfText;
-          }
-        } catch (err) {
-          console.error('PDF extraction failed:', err);
-        }
-      }
-      // 2. If file is text-based (.txt, .md, .csv)
-      else if (selectedFile.type.includes('text') || selectedFile.name.endsWith('.txt')) {
-        try {
-          textToParse = await selectedFile.text();
-        } catch {
-          textToParse = customText;
-        }
-      }
-
       const parsedData = await parsePrescriptionClient(textToParse, selectedFile.name);
       const rx: Prescription = {
         id: 'rx-' + Math.random().toString(36).substr(2, 7),
@@ -66,7 +65,7 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
       };
       setParsedRx(rx);
     } else {
-      const report = await parseLabReportClient(selectedFile.name, customText);
+      const report = await parseLabReportClient(selectedFile.name, textToParse);
       setParsedReport(report);
     }
     setParsing(false);
@@ -131,6 +130,40 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
     });
   };
 
+  // Biomarker Item Modifiers by Index
+  const handleRemoveBiomarker = (idx: number) => {
+    if (!parsedReport) return;
+    setParsedReport({
+      ...parsedReport,
+      testResults: parsedReport.testResults.filter((_, i) => i !== idx),
+    });
+  };
+
+  const handleAddCustomBiomarker = () => {
+    if (!parsedReport) return;
+    const newTest: ExtractedTestResult = {
+      id: 'tr-' + Math.random().toString(36).substr(2, 6),
+      testName: 'New Biomarker Test',
+      value: 100,
+      unit: 'mg/dL',
+      referenceRange: '70 - 110',
+      category: 'General Health',
+      isAbnormal: false,
+    };
+    setParsedReport({
+      ...parsedReport,
+      testResults: [...parsedReport.testResults, newTest],
+    });
+  };
+
+  const handleUpdateBiomarkerField = (idx: number, field: keyof ExtractedTestResult, val: any) => {
+    if (!parsedReport) return;
+    setParsedReport({
+      ...parsedReport,
+      testResults: parsedReport.testResults.map((t, i) => (i === idx ? { ...t, [field]: val } : t)),
+    });
+  };
+
   const handleConfirmRx = () => {
     if (!parsedRx || parsedRx.medicines.length === 0) return;
     const newSchedules = generateSchedulesFromMedicines(parsedRx.medicines, parsedRx.id);
@@ -139,7 +172,7 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
   };
 
   const handleConfirmReport = () => {
-    if (!parsedReport) return;
+    if (!parsedReport || parsedReport.testResults.length === 0) return;
     onReportConfirmed(parsedReport);
     setActiveTab('comparison');
   };
@@ -231,16 +264,28 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold flex items-center gap-1.5">
                 <FileText className="w-4 h-4 text-emerald-500" />
-                <span>Or Paste / Type Prescription Text Directly:</span>
+                <span>
+                  {activeType === 'prescription'
+                    ? 'Or Paste / Type Prescription Text Directly:'
+                    : 'Or Paste / Type Blood Report Table Directly:'}
+                </span>
               </span>
-              <span className="text-[11px] text-slate-400 font-semibold">e.g. Tab Paracetamol 650mg twice daily after food 5 days</span>
+              <span className="text-[11px] text-slate-400 font-semibold">
+                {activeType === 'prescription'
+                  ? 'e.g. Tab Paracetamol 650mg twice daily after food 5 days'
+                  : 'e.g. HbA1c 6.2 %, Fasting Blood Sugar 108 mg/dL'}
+              </span>
             </div>
 
             <textarea
               rows={3}
               value={customText}
               onChange={(e) => setCustomText(e.target.value)}
-              placeholder="e.g.&#10;1. Paracetamol 650mg - 1 tablet twice daily after meals for 5 days&#10;2. Pantoprazole 40mg - 1 tablet once daily before breakfast 10 days"
+              placeholder={
+                activeType === 'prescription'
+                  ? 'e.g.\n1. Omeprazole 20mg - 1 tablet once daily before breakfast 5 days\n2. Amoxicillin 500mg - 1 capsule once daily after meals 5 days\n3. Zerodol-P 500mg - 1 tablet once daily after meals 5 days\n4. Aspirin 250mg - 1 tablet twice daily after meals 3 days'
+                  : 'e.g.\nHbA1c (Glycated Hemoglobin) 6.2 % 4.0 - 5.6\nFasting Blood Sugar 108 mg/dL 70 - 99\nVitamin D (25-OH) 35.0 ng/mL 30.0 - 100.0\nTotal Cholesterol 195 mg/dL < 200'
+              }
               className="w-full rounded-2xl p-3.5 text-xs font-medium outline-none resize-none"
             />
 
@@ -258,7 +303,7 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
         </div>
       )}
 
-      {/* Parsed Prescription Result Card with Full Inline Editing */}
+      {/* 1. Parsed Prescription Result Card with Full Inline Editing */}
       {parsedRx && (
         <div className="card-subtle rounded-3xl p-6 sm:p-8 space-y-6 border border-emerald-500/40">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-emerald-900/30 pb-4 gap-3">
@@ -330,6 +375,7 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
                       <option value="Once daily (Night)">Once daily (Night)</option>
                       <option value="Twice daily">Twice daily (Morning & Night)</option>
                       <option value="Three times daily">Three times daily (M/A/N)</option>
+                      <option value="Every 6 hours (SOS)">Every 6 hours (SOS)</option>
                       <option value="As needed (SOS)">As needed (SOS)</option>
                     </select>
                   </div>
@@ -345,7 +391,9 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
                       >
                         <option value="After food">After food</option>
                         <option value="Before food">Before food</option>
+                        <option value="Take 30 min before breakfast">Take 30 min before breakfast</option>
                         <option value="With food">With food</option>
+                        <option value="As needed (max 4000mg/day)">As needed (max 4000mg/day)</option>
                       </select>
                     </div>
 
@@ -385,40 +433,113 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
         </div>
       )}
 
-      {/* Parsed Blood Report Result Card */}
+      {/* 2. Parsed Blood Report Result Card with Full Inline Editing */}
       {parsedReport && (
-        <div className="card-subtle rounded-3xl p-8 space-y-6 border border-emerald-500/40">
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-emerald-900/30 pb-4">
+        <div className="card-subtle rounded-3xl p-6 sm:p-8 space-y-6 border border-emerald-500/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-emerald-900/30 pb-4 gap-3">
             <div className="flex items-center space-x-3">
-              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+              <CheckCircle2 className="w-6 h-6 text-emerald-500 flex-shrink-0" />
               <div>
                 <h3 className="text-xl font-extrabold">Extracted Blood Test Results</h3>
-                <span className="text-xs">Lab: {parsedReport.labName} • Date: {parsedReport.reportDate}</span>
+                <span className="text-xs text-slate-400">Lab: {parsedReport.labName} • Date: {parsedReport.reportDate}</span>
               </div>
             </div>
-            <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/40">
-              📊 {parsedReport.testResults.length} Biomarkers Extracted
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleAddCustomBiomarker}
+                className="px-3 py-1.5 rounded-xl btn-secondary-visible text-xs font-extrabold flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Biomarker</span>
+              </button>
+              <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/40">
+                📊 {parsedReport.testResults.length} Biomarkers Extracted
+              </span>
+            </div>
           </div>
 
           <div className="space-y-3">
-            {parsedReport.testResults.map((t) => (
-              <div key={t.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#031f17] border border-slate-200 dark:border-emerald-900/30 flex items-center justify-between text-xs font-bold">
-                <div>
-                  <h5 className="text-sm font-extrabold">{t.testName}</h5>
-                  <span className="text-slate-500 dark:text-emerald-200/70">Ref Range: {t.referenceRange} {t.unit}</span>
-                </div>
-                <div className="text-right">
-                  <span className={`text-base font-extrabold block ${t.isAbnormal ? 'text-amber-500' : 'text-emerald-500'}`}>
-                    {t.value} {t.unit}
-                  </span>
-                  <span className="text-[10px] uppercase text-slate-400">{t.category}</span>
+            <h4 className="text-xs font-extrabold uppercase tracking-wider">
+              Verify & Edit Extracted Biomarkers ({parsedReport.testResults.length}):
+            </h4>
+
+            {parsedReport.testResults.map((t, idx) => (
+              <div
+                key={t.id || idx}
+                className="p-4 rounded-2xl bg-slate-50 dark:bg-[#031f17] border border-slate-200 dark:border-emerald-900/30 space-y-3"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 text-xs font-bold items-center">
+                  {/* Test Name */}
+                  <div className="sm:col-span-2">
+                    <label className="text-[10px] text-slate-400 uppercase block mb-1">Test / Biomarker Name</label>
+                    <input
+                      type="text"
+                      value={t.testName}
+                      onChange={(e) => handleUpdateBiomarkerField(idx, 'testName', e.target.value)}
+                      className="w-full rounded-xl px-3 py-1.5 text-xs font-bold outline-none"
+                    />
+                  </div>
+
+                  {/* Value & Unit */}
+                  <div>
+                    <label className="text-[10px] text-slate-400 uppercase block mb-1">Value &amp; Unit</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        step="any"
+                        value={t.value}
+                        onChange={(e) => handleUpdateBiomarkerField(idx, 'value', parseFloat(e.target.value) || 0)}
+                        className="w-20 rounded-xl px-2.5 py-1.5 text-xs font-bold outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={t.unit}
+                        onChange={(e) => handleUpdateBiomarkerField(idx, 'unit', e.target.value)}
+                        className="w-20 rounded-xl px-2.5 py-1.5 text-xs font-bold outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Reference Range */}
+                  <div>
+                    <label className="text-[10px] text-slate-400 uppercase block mb-1">Ref Range</label>
+                    <input
+                      type="text"
+                      value={t.referenceRange}
+                      onChange={(e) => handleUpdateBiomarkerField(idx, 'referenceRange', e.target.value)}
+                      className="w-full rounded-xl px-3 py-1.5 text-xs font-bold outline-none"
+                    />
+                  </div>
+
+                  {/* Status & Delete */}
+                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-0">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateBiomarkerField(idx, 'isAbnormal', !t.isAbnormal)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer border ${
+                        t.isAbnormal
+                          ? 'bg-amber-500/20 text-amber-600 border-amber-500/40'
+                          : 'bg-emerald-500/20 text-emerald-600 border-emerald-500/40'
+                      }`}
+                    >
+                      {t.isAbnormal ? '⚠ Abnormal' : '✓ Normal'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBiomarker(idx)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                      title="Remove this test"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="flex items-center justify-end space-x-3 pt-3">
+          <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-emerald-900/30">
             <button
               onClick={() => {
                 setParsedReport(null);
@@ -430,7 +551,8 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
             </button>
             <button
               onClick={handleConfirmReport}
-              className="px-6 py-3.5 rounded-2xl btn-primary-visible text-xs font-extrabold flex items-center space-x-2 cursor-pointer shadow-lg"
+              disabled={parsedReport.testResults.length === 0}
+              className="px-6 py-3.5 rounded-2xl btn-primary-visible text-xs font-extrabold flex items-center space-x-2 cursor-pointer shadow-lg disabled:opacity-50"
             >
               <span>Compare with Past Reports</span>
               <ArrowRight className="w-4 h-4" />
