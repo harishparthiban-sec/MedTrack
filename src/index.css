@@ -1,0 +1,245 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+/* =========================================================
+   1. DARK THEME — DARK ROYAL GREEN PALETTE (#041a14)
+   ========================================================= */
+html.dark {
+  background-color: #041a14 !important;
+  color: #f8fafc !important;
+}
+
+html.dark body {
+  background-color: #041a14 !important;
+  color: #f8fafc !important;
+}
+
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
+  color: #ffffff !important;
+  font-weight: 800 !important;
+}
+
+html.dark p,
+html.dark label {
+  color: #a7f3d0 !important;
+}
+
+html.dark .navbar-clean {
+  background: rgba(4, 26, 20, 0.9) !important;
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(52, 211, 153, 0.15) !important;
+}
+
+html.dark .card-subtle,
+html.dark .glass-card {
+  background: rgba(7, 40, 31, 0.85) !important;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(52, 211, 153, 0.18) !important;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6) !important;
+}
+
+html.dark .card-subtle:hover,
+html.dark .glass-card:hover {
+  border-color: rgba(52, 211, 153, 0.4) !important;
+  box-shadow: 0 15px 35px -10px rgba(16, 185, 129, 0.2) !important;
+}
+
+html.dark .bg-slate-900,
+html.dark .bg-slate-950 {
+  background-color: #03140f !important;
+  border-color: rgba(52, 211, 153, 0.15) !important;
+}
+
+/* =========================================================
+   2. LIGHT THEME — CLEAN PALE WHITE PALETTE (#f8fafc / #ffffff)
+   ========================================================= */
+html.light {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light .navbar-clean {
+  background: #ffffff !important;
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+html.light .card-subtle,
+html.light .glass-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 25px -4px rgba(0, 0, 0, 0.06) !important;
+  color: #0f172a !important;
+}
+
+html.light .card-subtle:hover,
+html.light .glass-card:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light h1, 
+html.light h2, 
+html.light h3, 
+html.light h4,
+html.light h5,
+html.light h6 {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+html.light p,
+html.light label {
+  color: #334155 !important;
+}
+
+/* Automatic light mode overrides for hardcoded dark classes */
+html.light .bg-slate-900,
+html.light .bg-slate-900\/90,
+html.light .bg-slate-900\/80,
+html.light .bg-slate-900\/60,
+html.light .bg-slate-950,
+html.light .bg-slate-950\/90,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/60,
+html.light .bg-slate-950\/30,
+html.light .bg-slate-800 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .border-slate-800,
+html.light .border-slate-700,
+html.light .border-slate-800\/80,
+html.light .border-slate-800\/60,
+html.light .border-slate-700\/80 {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .text-slate-200,
+html.light .text-slate-300 {
+  color: #334155 !important;
+}
+
+html.light .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.light .text-slate-500 {
+  color: #64748b !important;
+}
+
+html.light .text-white {
+  color: #0f172a !important;
+}
+
+/* Exceptions: Elements that should retain white text in light mode */
+html.light .btn-primary-visible,
+html.light .btn-primary-visible *,
+html.light .btn-danger-visible,
+html.light .btn-danger-visible *,
+html.light .bg-emerald-500,
+html.light .bg-emerald-500 *,
+html.light .bg-emerald-600,
+html.light .bg-emerald-600 *,
+html.light .bg-rose-500,
+html.light .bg-rose-500 * {
+  color: #ffffff !important;
+}
+
+/* Dark mode Hero banner text */
+html.dark .hero-banner h1,
+html.dark .hero-banner h2,
+html.dark .hero-banner h3,
+html.dark .hero-banner p,
+html.dark .hero-banner span,
+html.dark .hero-banner strong {
+  color: #ffffff !important;
+}
+html.dark .hero-banner .hero-subtitle {
+  color: #a7f3d0 !important;
+}
+
+html.light input,
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1.5px solid #cbd5e1 !important;
+}
+
+/* =========================================================
+   3. HYPER-VISIBLE BUTTONS
+   ========================================================= */
+.btn-primary-visible {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border: 1.5px solid #34d399 !important;
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.4) !important;
+  transition: all 0.15s ease !important;
+}
+
+.btn-primary-visible:hover {
+  background-color: #047857 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 8px 22px rgba(5, 150, 105, 0.5) !important;
+}
+
+.btn-secondary-visible {
+  background-color: #064e3b !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border: 1.5px solid #047857 !important;
+  box-shadow: 0 4px 14px rgba(6, 78, 59, 0.3) !important;
+  transition: all 0.15s ease !important;
+}
+
+html.light .btn-secondary-visible {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border: 1.5px solid #cbd5e1 !important;
+}
+
+html.light .btn-secondary-visible:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.btn-danger-visible {
+  background-color: #e11d48 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border: 1.5px solid #f43f5e !important;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.4) !important;
+  transition: all 0.15s ease !important;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #059669;
+  border-radius: 9999px;
+}
