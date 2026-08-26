@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Upload, CheckCircle2, AlertTriangle, ArrowRight, Sparkles } from 'lucide-react';
-import type { Prescription, MedicineScheduleItem, MedicalReport } from '../types';
-import { parsePrescriptionClient, generateSchedulesFromMedicines } from '../services/ocrEngine';
+import { Upload, CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, FileText } from 'lucide-react';
+import type { Prescription, MedicineScheduleItem, MedicalReport, ExtractedMedicine } from '../types';
+import { parsePrescriptionClient, generateSchedulesFromMedicines, parseLabReportClient } from '../services/ocrEngine';
 
 interface UploadCenterProps {
   onPrescriptionConfirmed: (rx: Prescription, schedules: MedicineScheduleItem[]) => void;
@@ -16,6 +16,7 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
 }) => {
   const [activeType, setActiveType] = useState<'prescription' | 'report'>('prescription');
   const [parsing, setParsing] = useState(false);
+  const [customText, setCustomText] = useState('');
   const [parsedRx, setParsedRx] = useState<Prescription | null>(null);
   const [parsedReport, setParsedReport] = useState<MedicalReport | null>(null);
 
@@ -28,13 +29,25 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
 
   const handleProcessFile = async (selectedFile: File) => {
     setParsing(true);
-    if (activeType === 'prescription') {
-      const dummyText = `Dr. A. Sharma, MD. Date: ${new Date().toLocaleDateString()}
-      1. Paracetamol 500mg - 1 tablet twice daily after meals for 5 days.
-      2. Amoxicillin 250mg - 1 capsule thrice daily before meals for 7 days.
-      3. Vitamin D3 60k IU - 1 sachet once weekly. (Take with warm milk after dinner)`;
 
-      const parsedData = await parsePrescriptionClient(dummyText, selectedFile.name);
+    if (activeType === 'prescription') {
+      let textToParse = customText;
+      
+      // If file is text-based (.txt, .md, .csv)
+      if (selectedFile.type.includes('text') || selectedFile.name.endsWith('.txt')) {
+        try {
+          textToParse = await selectedFile.text();
+        } catch {
+          textToParse = customText || selectedFile.name;
+        }
+      }
+
+      if (!textToParse) {
+        textToParse = `Dr. A. Sharma, MD
+1. ${selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')} 500mg - 1 tablet twice daily after meals for 5 days.`;
+      }
+
+      const parsedData = await parsePrescriptionClient(textToParse, selectedFile.name);
       const rx: Prescription = {
         id: 'rx-' + Math.random().toString(36).substr(2, 7),
         filename: selectedFile.name,
@@ -47,53 +60,73 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
       };
       setParsedRx(rx);
     } else {
-        const report: MedicalReport = {
-          id: 'rep-' + Math.random().toString(36).substr(2, 7),
-          filename: selectedFile.name,
-          labName: 'Apollo Diagnostics & Health Labs',
-          reportDate: new Date().toISOString().split('T')[0],
-          summary: 'Blood Biomarker Report: Fasting Glucose 108 mg/dL, HbA1c 6.2%, Vitamin D 35 ng/mL.',
-          uploadedAt: new Date().toISOString(),
-          testResults: [
-            {
-              id: 't-1',
-              testName: 'HbA1c (Glycated Hemoglobin)',
-              value: 6.2,
-              unit: '%',
-              referenceRange: '4.0 - 5.6',
-              category: 'Diabetes',
-              isAbnormal: true,
-              notes: 'Good progress. Decreased from previous 6.8%.',
-            },
-            {
-              id: 't-2',
-              testName: 'Vitamin D (25-OH)',
-              value: 35,
-              unit: 'ng/mL',
-              referenceRange: '30 - 100',
-              category: 'Vitamins',
-              isAbnormal: false,
-              notes: 'Sufficient level.',
-            },
-            {
-              id: 't-3',
-              testName: 'Fasting Blood Sugar',
-              value: 108,
-              unit: 'mg/dL',
-              referenceRange: '70 - 99',
-              category: 'Diabetes',
-              isAbnormal: true,
-              notes: 'Slightly elevated.',
-            },
-          ],
-        };
-        setParsedReport(report);
-      }
+      const report = await parseLabReportClient(selectedFile.name, customText);
+      setParsedReport(report);
+    }
     setParsing(false);
   };
 
-  const handleConfirmRx = () => {
+  const handleManualScan = async () => {
+    if (!customText.trim()) return;
+    setParsing(true);
+    if (activeType === 'prescription') {
+      const parsedData = await parsePrescriptionClient(customText, 'Custom_Prescription.txt');
+      const rx: Prescription = {
+        id: 'rx-' + Math.random().toString(36).substr(2, 7),
+        filename: 'Prescription_Scan.txt',
+        doctorName: parsedData.doctorName,
+        date: parsedData.date,
+        medicines: parsedData.medicines,
+        ambiguousCount: parsedData.ambiguousCount,
+        notes: parsedData.notes,
+        uploadedAt: new Date().toISOString(),
+      };
+      setParsedRx(rx);
+    } else {
+      const report = await parseLabReportClient('Custom_Lab_Report.txt', customText);
+      setParsedReport(report);
+    }
+    setParsing(false);
+  };
+
+  // Medicine Item Modifiers by Index
+  const handleRemoveMedicine = (idx: number) => {
     if (!parsedRx) return;
+    setParsedRx({
+      ...parsedRx,
+      medicines: parsedRx.medicines.filter((_, i) => i !== idx),
+    });
+  };
+
+  const handleAddCustomMedicine = () => {
+    if (!parsedRx) return;
+    const newMed: ExtractedMedicine = {
+      id: 'med-' + Math.random().toString(36).substr(2, 6),
+      name: 'New Medicine',
+      strength: '500 mg',
+      dose: '1 tablet',
+      frequency: 'Twice daily',
+      timing: 'After food',
+      duration_days: 5,
+      confidence: 1.0,
+      needs_review: false,
+    };
+    setParsedRx({
+      ...parsedRx,
+      medicines: [...parsedRx.medicines, newMed],
+    });
+  };
+
+  const handleUpdateMedicineField = (idx: number, field: keyof ExtractedMedicine, val: any) => {
+    if (!parsedRx) return;
+    setParsedRx({
+      ...parsedRx,
+      medicines: parsedRx.medicines.map((m, i) => (i === idx ? { ...m, [field]: val } : m)),
+    });
+  };
+
+  const handleConfirmRx = () => {
+    if (!parsedRx || parsedRx.medicines.length === 0) return;
     const newSchedules = generateSchedulesFromMedicines(parsedRx.medicines, parsedRx.id);
     onPrescriptionConfirmed(parsedRx, newSchedules);
     setActiveTab('schedule');
@@ -118,7 +151,7 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
           Upload Doctor Prescription or Blood Report
         </h1>
         <p className="text-xs sm:text-sm max-w-xl mx-auto font-medium">
-          Drag & drop your scanned document or image. AI automatically extracts medicines, timings, dosages, and lab biomarker values.
+          Upload your scanned document or paste text directly. AI automatically extracts medicines, timings, dosages, and lab biomarker values.
         </p>
       </div>
 
@@ -154,83 +187,192 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
         </button>
       </div>
 
-      {/* Drag & Drop Box */}
+      {/* Upload Zone & Text Input */}
       {!parsedRx && !parsedReport && (
-        <div className="card-subtle rounded-3xl p-10 text-center border-2 border-dashed border-slate-300 dark:border-emerald-900/60 hover:border-emerald-500 transition-all space-y-5">
-          
-          <div className="w-16 h-16 rounded-3xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto">
-            <Upload className="w-8 h-8" />
-          </div>
-
-          <div className="space-y-1">
-            <h3 className="text-lg font-extrabold">
-              {parsing ? 'Parsing Document with AI...' : `Upload your ${activeType === 'prescription' ? 'Prescription Scan' : 'Blood Test PDF'}`}
-            </h3>
-            <p className="text-xs font-medium">
-              Supported formats: JPG, PNG, PDF, WEBP (Max 15 MB)
-            </p>
-          </div>
-
-          {parsing ? (
-            <div className="flex items-center justify-center space-x-3 text-emerald-500 font-extrabold text-xs py-4">
-              <span className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-              <span>Scanning OCR Text & Extracting Biomarkers...</span>
+        <div className="space-y-6">
+          {/* Drag & Drop Box */}
+          <div className="card-subtle rounded-3xl p-8 sm:p-10 text-center border-2 border-dashed border-slate-300 dark:border-emerald-900/60 hover:border-emerald-500 transition-all space-y-5">
+            
+            <div className="w-16 h-16 rounded-3xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto">
+              <Upload className="w-8 h-8" />
             </div>
-          ) : (
-            <label className="inline-block px-6 py-3.5 rounded-2xl btn-primary-visible text-xs font-extrabold cursor-pointer shadow-lg">
-              <span>Select Document File</span>
-              <input type="file" onChange={handleFileDrop} accept="image/*,.pdf" className="hidden" />
-            </label>
-          )}
 
+            <div className="space-y-1">
+              <h3 className="text-lg font-extrabold">
+                {parsing ? 'Parsing Document with AI...' : `Upload your ${activeType === 'prescription' ? 'Prescription Scan / Photo' : 'Blood Test PDF / Scan'}`}
+              </h3>
+              <p className="text-xs font-medium">
+                Supported formats: JPG, PNG, PDF, WEBP, TXT (Max 15 MB)
+              </p>
+            </div>
+
+            {parsing ? (
+              <div className="flex items-center justify-center space-x-3 text-emerald-500 font-extrabold text-xs py-4">
+                <span className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                <span>Scanning OCR Text & Extracting Biomarkers...</span>
+              </div>
+            ) : (
+              <label className="inline-block px-6 py-3.5 rounded-2xl btn-primary-visible text-xs font-extrabold cursor-pointer shadow-lg">
+                <span>Select Document File</span>
+                <input type="file" onChange={handleFileDrop} accept="image/*,.pdf,.txt" className="hidden" />
+              </label>
+            )}
+
+          </div>
+
+          {/* Optional Direct Paste / Manual Text Input */}
+          <div className="card-subtle rounded-3xl p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-emerald-500" />
+                <span>Or Paste / Type Prescription Text Directly:</span>
+              </span>
+              <span className="text-[11px] text-slate-400 font-semibold">e.g. Tab Paracetamol 650mg twice daily after food 5 days</span>
+            </div>
+
+            <textarea
+              rows={3}
+              value={customText}
+              onChange={(e) => setCustomText(e.target.value)}
+              placeholder="e.g.&#10;1. Paracetamol 650mg - 1 tablet twice daily after meals for 5 days&#10;2. Pantoprazole 40mg - 1 tablet once daily before breakfast 10 days"
+              className="w-full rounded-2xl p-3.5 text-xs font-medium outline-none resize-none"
+            />
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleManualScan}
+                disabled={!customText.trim() || parsing}
+                className="px-5 py-2.5 rounded-xl btn-primary-visible text-xs font-extrabold cursor-pointer disabled:opacity-50"
+              >
+                Parse Typed Text
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Parsed Prescription Result Card */}
+      {/* Parsed Prescription Result Card with Full Inline Editing */}
       {parsedRx && (
-        <div className="card-subtle rounded-3xl p-8 space-y-6 border border-emerald-500/40">
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-emerald-900/30 pb-4">
+        <div className="card-subtle rounded-3xl p-6 sm:p-8 space-y-6 border border-emerald-500/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-emerald-900/30 pb-4 gap-3">
             <div className="flex items-center space-x-3">
-              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+              <CheckCircle2 className="w-6 h-6 text-emerald-500 flex-shrink-0" />
               <div>
                 <h3 className="text-xl font-extrabold">Extracted Prescription Details</h3>
-                <span className="text-xs">Doctor: {parsedRx.doctorName || 'Dr. A. Sharma'} • Date: {parsedRx.date}</span>
+                <span className="text-xs text-slate-400">
+                  Doctor: {parsedRx.doctorName} • Date: {parsedRx.date}
+                </span>
               </div>
             </div>
-            <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40">
-              ✓ AI Extraction Complete
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleAddCustomMedicine}
+                className="px-3 py-1.5 rounded-xl btn-secondary-visible text-xs font-extrabold flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Medicine</span>
+              </button>
+              <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40">
+                ✓ {parsedRx.medicines.length} Medicines
+              </span>
+            </div>
           </div>
 
           <div className="space-y-3">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider">Medicines Extracted ({parsedRx.medicines.length})</h4>
+            <h4 className="text-xs font-extrabold uppercase tracking-wider">
+              Verify & Edit Extracted Medicines ({parsedRx.medicines.length}):
+            </h4>
+
             {parsedRx.medicines.map((m, idx) => (
-              <div key={idx} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#031f17] border border-slate-200 dark:border-emerald-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold">
-                <div>
-                  <h5 className="text-sm font-extrabold">{m.name} <span className="text-emerald-500">({m.strength})</span></h5>
-                  <span className="text-slate-500 dark:text-emerald-200/70">{m.dose} • {m.timing} • Duration: {m.duration_days} days</span>
+              <div
+                key={m.id || idx}
+                className="p-4 rounded-2xl bg-slate-50 dark:bg-[#031f17] border border-slate-200 dark:border-emerald-900/30 space-y-3"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs font-bold">
+                  {/* Medicine Name */}
+                  <div className="sm:col-span-1">
+                    <label className="text-[10px] text-slate-400 uppercase block mb-1">Medicine Name</label>
+                    <input
+                      type="text"
+                      value={m.name}
+                      onChange={(e) => handleUpdateMedicineField(idx, 'name', e.target.value)}
+                      className="w-full rounded-xl px-3 py-1.5 text-xs font-bold outline-none"
+                    />
+                  </div>
+
+                  {/* Strength & Dose */}
+                  <div>
+                    <label className="text-[10px] text-slate-400 uppercase block mb-1">Strength (e.g. 500mg)</label>
+                    <input
+                      type="text"
+                      value={m.strength}
+                      onChange={(e) => handleUpdateMedicineField(idx, 'strength', e.target.value)}
+                      className="w-full rounded-xl px-3 py-1.5 text-xs font-bold outline-none"
+                    />
+                  </div>
+
+                  {/* Frequency */}
+                  <div>
+                    <label className="text-[10px] text-slate-400 uppercase block mb-1">Frequency</label>
+                    <select
+                      value={m.frequency}
+                      onChange={(e) => handleUpdateMedicineField(idx, 'frequency', e.target.value)}
+                      className="w-full rounded-xl px-3 py-1.5 text-xs font-bold outline-none"
+                    >
+                      <option value="Once daily">Once daily (Morning)</option>
+                      <option value="Once daily (Night)">Once daily (Night)</option>
+                      <option value="Twice daily">Twice daily (Morning & Night)</option>
+                      <option value="Three times daily">Three times daily (M/A/N)</option>
+                      <option value="As needed (SOS)">As needed (SOS)</option>
+                    </select>
+                  </div>
+
+                  {/* Timing & Action */}
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="text-[10px] text-slate-400 uppercase block mb-1">Food Timing</label>
+                      <select
+                        value={m.timing}
+                        onChange={(e) => handleUpdateMedicineField(idx, 'timing', e.target.value)}
+                        className="w-full rounded-xl px-3 py-1.5 text-xs font-bold outline-none"
+                      >
+                        <option value="After food">After food</option>
+                        <option value="Before food">Before food</option>
+                        <option value="With food">With food</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMedicine(idx)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                      title="Remove this medicine"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                {m.needs_review && (
-                  <span className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-600 border border-amber-500/40 flex items-center">
-                    <AlertTriangle className="w-3.5 h-3.5 mr-1" /> Handwritten Note Flagged
-                  </span>
-                )}
               </div>
             ))}
           </div>
 
-          <div className="flex items-center justify-end space-x-3 pt-3">
+          <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-emerald-900/30">
             <button
-              onClick={() => setParsedRx(null)}
+              onClick={() => {
+                setParsedRx(null);
+                setCustomText('');
+              }}
               className="px-5 py-3 rounded-2xl btn-secondary-visible text-xs font-extrabold cursor-pointer"
             >
-              Re-upload File
+              Re-upload / Cancel
             </button>
             <button
               onClick={handleConfirmRx}
-              className="px-6 py-3.5 rounded-2xl btn-primary-visible text-xs font-extrabold flex items-center space-x-2 cursor-pointer shadow-lg"
+              disabled={parsedRx.medicines.length === 0}
+              className="px-6 py-3.5 rounded-2xl btn-primary-visible text-xs font-extrabold flex items-center space-x-2 cursor-pointer shadow-lg disabled:opacity-50"
             >
-              <span>Add to Medicine Schedule</span>
+              <span>Add {parsedRx.medicines.length} Medicine(s) to Schedule</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -249,7 +391,7 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
               </div>
             </div>
             <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/40">
-              📊 3 Biomarkers Extracted
+              📊 {parsedReport.testResults.length} Biomarkers Extracted
             </span>
           </div>
 
@@ -258,7 +400,7 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
               <div key={t.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#031f17] border border-slate-200 dark:border-emerald-900/30 flex items-center justify-between text-xs font-bold">
                 <div>
                   <h5 className="text-sm font-extrabold">{t.testName}</h5>
-                  <span className="text-slate-500 dark:text-emerald-200/70">Ref Range: {t.referenceRange} {t.unit} • {t.notes}</span>
+                  <span className="text-slate-500 dark:text-emerald-200/70">Ref Range: {t.referenceRange} {t.unit}</span>
                 </div>
                 <div className="text-right">
                   <span className={`text-base font-extrabold block ${t.isAbnormal ? 'text-amber-500' : 'text-emerald-500'}`}>
@@ -272,7 +414,10 @@ export const UploadCenter: React.FC<UploadCenterProps> = ({
 
           <div className="flex items-center justify-end space-x-3 pt-3">
             <button
-              onClick={() => setParsedReport(null)}
+              onClick={() => {
+                setParsedReport(null);
+                setCustomText('');
+              }}
               className="px-5 py-3 rounded-2xl btn-secondary-visible text-xs font-extrabold cursor-pointer"
             >
               Re-upload File
