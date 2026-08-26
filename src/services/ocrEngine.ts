@@ -1,14 +1,20 @@
 import type { ExtractedMedicine, MedicineScheduleItem, ExtractedTestResult, MedicalReport } from '../types';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set up PDF.js worker
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+}
 
 /**
  * In-browser Image Optical Character Recognition (OCR) using Tesseract.js
  * Extracts raw text from scanned photos, screenshots, PNG, JPG, and WEBP documents.
  */
-export const recognizeImageText = async (file: File): Promise<string> => {
+export const recognizeImageText = async (fileOrBlob: Blob | File): Promise<string> => {
   try {
     const { createWorker } = await import('tesseract.js');
     const worker = await createWorker('eng');
-    const ret = await worker.recognize(file);
+    const ret = await worker.recognize(fileOrBlob);
     await worker.terminate();
     return ret.data.text || '';
   } catch (err) {
@@ -18,88 +24,66 @@ export const recognizeImageText = async (file: File): Promise<string> => {
 };
 
 /**
- * Browser-native PDF text stream extractor (supports compressed & uncompressed streams)
+ * High-accuracy PDF text extractor using PDF.js
+ * Extracts all text lines, preserving row layout and table columns.
+ * If the PDF is a scanned bitmap without text, automatically renders to Canvas and runs OCR!
  */
 export const extractTextFromPdfFile = async (file: File): Promise<string> => {
   try {
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    const rawString = new TextDecoder('latin1').decode(bytes);
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+    const pdf = await loadingTask.promise;
+    let fullText = '';
 
-    const extractedChunks: string[] = [];
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      
+      let lastY: number | null = null;
+      let pageText = '';
 
-    // Match all streams in the PDF
-    const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-    let match;
-    while ((match = streamRegex.exec(rawString)) !== null) {
-      const streamContent = match[1];
-      const streamBytes = new Uint8Array(streamContent.length);
-      for (let i = 0; i < streamContent.length; i++) {
-        streamBytes[i] = streamContent.charCodeAt(i) & 0xff;
-      }
-
-      // Decompress Flate streams using browser native DecompressionStream
-      if (typeof DecompressionStream !== 'undefined') {
-        try {
-          const ds = new DecompressionStream('deflate');
-          const writer = ds.writable.getWriter();
-          writer.write(streamBytes);
-          writer.close();
-          const response = new Response(ds.readable);
-          const decompressed = await response.text();
-          extractedChunks.push(decompressed);
-        } catch {
-          try {
-            const ds = new DecompressionStream('deflate-raw');
-            const writer = ds.writable.getWriter();
-            writer.write(streamBytes);
-            writer.close();
-            const response = new Response(ds.readable);
-            const decompressed = await response.text();
-            extractedChunks.push(decompressed);
-          } catch {
-            // Non-deflate stream, ignore
+      for (const item of textContent.items as any[]) {
+        if ('str' in item) {
+          // If vertical line position changed, start a new line
+          if (lastY !== null && Math.abs(item.transform[5] - lastY) > 4) {
+            pageText += '\n';
+          } else if (pageText.length > 0 && !pageText.endsWith('\n') && !pageText.endsWith(' ')) {
+            pageText += ' ';
           }
+          pageText += item.str;
+          lastY = item.transform[5];
+        }
+      }
+
+      // If page had text
+      if (pageText.trim().length > 10) {
+        fullText += pageText + '\n';
+      } else {
+        // If page has no text stream (scanned image inside PDF), render to canvas & OCR!
+        try {
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          if (context) {
+            await page.render({ canvasContext: context, viewport } as any).promise;
+            const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
+            if (blob) {
+              const ocrResult = await recognizeImageText(blob);
+              fullText += ocrResult + '\n';
+            }
+          }
+        } catch (renderErr) {
+          console.error('Canvas render for scanned PDF error:', renderErr);
         }
       }
     }
 
-    extractedChunks.push(rawString);
-
-    let extractedText = '';
-
-    for (const chunk of extractedChunks) {
-      // 1. Text operator (string) Tj
-      const tjMatches = chunk.matchAll(/\(([^)]+)\)\s*(?:Tj|'|")/g);
-      for (const m of tjMatches) {
-        extractedText += m[1] + ' ';
-      }
-
-      // 2. Text array operator [(string) -10 (string)] TJ
-      const arrayMatches = chunk.matchAll(/\[(.*?)\]\s*TJ/g);
-      for (const arr of arrayMatches) {
-        const itemMatches = arr[1].matchAll(/\(([^)]+)\)/g);
-        let line = '';
-        for (const im of itemMatches) {
-          line += im[1] + ' ';
-        }
-        if (line.trim()) {
-          extractedText += '\n' + line.trim();
-        }
-      }
-    }
-
-    // Clean up escape characters e.g. \n, \r, \t, \(, \)
-    const cleaned = extractedText
-      .replace(/\\([()\\])/g, '$1')
-      .replace(/\\r/g, '\n')
-      .replace(/\\n/g, '\n')
-      .replace(/\\t/g, ' ')
-      .trim();
-
-    return cleaned || rawString;
+    return fullText.trim();
   } catch (err) {
-    console.error('PDF text extraction error:', err);
+    console.error('PDF.js text extraction error:', err);
     return '';
   }
 };
@@ -118,7 +102,7 @@ export const parsePrescriptionClient = async (
   ambiguousCount: number;
   notes: string;
 }> => {
-  await new Promise((res) => setTimeout(res, 400));
+  await new Promise((res) => setTimeout(res, 300));
 
   const text = rawText.trim();
   const extractedMedicines: ExtractedMedicine[] = [];
@@ -452,19 +436,18 @@ export const generateSchedulesFromMedicines = (
     }
   });
 
-return schedules;
+  return schedules;
 };
 
 /**
  * Universal Intelligent Blood Lab Report Table & Biomarker Parser
- * Handles CBC, LFT, KFT, Lipid, Diabetes, Thyroid, Vitamins formats.
- * Supports: L/H abnormal flags, comma-separated numbers, all medical units.
+ * Extracts all biomarker rows, values, units, reference ranges, and abnormal indicators.
  */
 export const parseLabReportClient = async (
   filename: string,
   rawText?: string
 ): Promise<MedicalReport> => {
-  await new Promise((res) => setTimeout(res, 400));
+  await new Promise((res) => setTimeout(res, 300));
 
   const text = (rawText || filename).trim();
   const testResults: ExtractedTestResult[] = [];
@@ -512,7 +495,6 @@ export const parseLabReportClient = async (
     /^differential leucocyte count$/i, /^ref(erence)?(\s+range)?$/i,
     /^test\s*value\s*unit/i,
   ];
-
 
   for (const line of lines) {
     // Skip headers
@@ -619,4 +601,3 @@ export const parseLabReportClient = async (
     uploadedAt: new Date().toISOString(),
   };
 };
-
