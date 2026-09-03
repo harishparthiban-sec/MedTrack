@@ -225,6 +225,7 @@ export function App() {
         setActiveTab={setActiveTab}
         user={user}
         pendingCount={pendingCount}
+        reportsCount={reports.length}
         theme={theme}
         onToggleTheme={toggleTheme}
         onOpenAuthModal={() => setUser(null)}
@@ -263,6 +264,7 @@ export function App() {
             onPrescriptionConfirmed={handlePrescriptionConfirmed}
             onReportConfirmed={handleReportConfirmed}
             setActiveTab={setActiveTab}
+            reportsCount={reports.length}
           />
         )}
 
@@ -280,6 +282,7 @@ export function App() {
             reports={reports}
             onDeletePrescription={handleDeletePrescription}
             onDeleteReport={handleDeleteReport}
+            setActiveTab={setActiveTab}
           />
         )}
       </main>

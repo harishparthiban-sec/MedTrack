@@ -21,12 +21,14 @@ interface UploadCenterProps {
   onPrescriptionConfirmed: (rx: Prescription, schedules: MedicineScheduleItem[]) => void;
   onReportConfirmed: (report: MedicalReport) => void;
   setActiveTab: (tab: string) => void;
+  reportsCount?: number;
 }
 
 export const UploadCenter: React.FC<UploadCenterProps> = ({
   onPrescriptionConfirmed,
   onReportConfirmed,
   setActiveTab,
+  reportsCount = 0,
 }) => {
   const [activeType, setActiveType] = useState<'prescription' | 'report'>('prescription');
   const [parsing, setParsing] = useState(false);
@@ -296,6 +298,12 @@ Vitamin D (25-OH): 22.4 ng/mL (30.0 - 100.0) Low`;
     setActiveTab('schedule');
   };
 
+  const handleSaveToHistory = () => {
+    if (!parsedReport || parsedReport.testResults.length === 0) return;
+    onReportConfirmed(parsedReport);
+    setActiveTab('reports');
+  };
+
   const handleConfirmReport = () => {
     if (!parsedReport || parsedReport.testResults.length === 0) return;
     onReportConfirmed(parsedReport);
@@ -317,6 +325,20 @@ Vitamin D (25-OH): 22.4 ng/mL (30.0 - 100.0) Low`;
         <p className="text-xs sm:text-sm max-w-xl mx-auto font-medium text-slate-500 dark:text-emerald-200/70">
           Upload your scanned document or paste text directly. AI automatically extracts medicines, timings, dosages, and lab biomarker values.
         </p>
+
+        {reportsCount > 0 && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('reports')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 cursor-pointer transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>View Saved Report History ({reportsCount})</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Type Switcher */}
@@ -1022,14 +1044,24 @@ Vitamin D (25-OH): 22.4 ng/mL (30.0 - 100.0) Low`;
                 Re-upload File
               </button>
 
-              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveToHistory}
+                  disabled={parsedReport.testResults.length === 0}
+                  className="w-full sm:w-auto px-5 py-3.5 rounded-2xl btn-secondary-visible text-xs font-extrabold flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Save to Report History</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleConfirmReport}
                   disabled={parsedReport.testResults.length === 0}
                   className="w-full sm:w-auto px-6 py-3.5 rounded-2xl btn-primary-visible text-xs font-extrabold flex items-center justify-center space-x-2 cursor-pointer shadow-lg disabled:opacity-50"
                 >
-                  <span>Confirm &amp; Compare with Past Reports ({parsedReport.testResults.length})</span>
+                  <span>Compare in Analytics ({parsedReport.testResults.length})</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>

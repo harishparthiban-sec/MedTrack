@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pill, Activity, Calendar, Upload, BarChart3, LogOut, UserCheck, Sun, Moon, User } from 'lucide-react';
+import { Pill, Activity, Calendar, Upload, BarChart3, LogOut, UserCheck, Sun, Moon, User, FileText } from 'lucide-react';
 import type { UserProfile } from '../types';
 
 interface NavbarProps {
@@ -7,6 +7,7 @@ interface NavbarProps {
   setActiveTab: (tab: string) => void;
   user: UserProfile | null;
   pendingCount: number;
+  reportsCount?: number;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
   onOpenAuthModal: () => void;
@@ -19,6 +20,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   user,
   pendingCount,
+  reportsCount = 0,
   theme,
   onToggleTheme,
   onOpenAuthModal,
@@ -29,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: Activity },
     { id: 'schedule', label: "Today's Doses", icon: Pill, badge: pendingCount > 0 ? pendingCount : null },
     { id: 'upload', label: 'Upload', icon: Upload },
+    { id: 'reports', label: 'History', icon: FileText, badge: reportsCount > 0 ? reportsCount : null },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'comparison', label: 'Analytics', icon: BarChart3 },
   ];
