@@ -569,18 +569,63 @@ const isValueAbnormal = (
 
 
 /**
- * Extract the first reference range pattern from a string.
- * Matches: "N - M", "< N", "> N"
+ * Comprehensive check for non-data header/footer/facility lines.
+ * Prevents hospital names, addresses, doctor names, invoice numbers,
+ * sample IDs, and column titles from ever being parsed as biomarkers.
  */
-const extractRefRange = (str: string): string => {
-  const m = str.match(/([<>]?\s*[\d.]+\s*[-–]\s*[\d.]+|[<>]\s*[\d.]+)/);
-  return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+const isMetadataLine = (raw: string): boolean => {
+  const l = raw.trim().toLowerCase();
+  if (l.length < 3) return true;
+  if (/^[\s\-=*_|~#+:]+$/.test(l)) return true;
+
+  // Table header column labels
+  if (/^(test\s*name|investigation|parameter|analyte|test\s*description|examination|profile|panel)\b/i.test(l)) return true;
+  if (/\b(biological\s*ref|reference\s*(range|interval)|normal\s*range)\b/i.test(l) && /\b(result|value|units?|status)\b/i.test(l)) return true;
+
+  // Hospital, Clinics, Laboratories, Medical Centers
+  if (/\b(hospital|hospitals|clinic|clinics|diagnostics?|pathology|laborator(y|ies)|healthcare|health\s*centre|nursing\s*home|medical\s*centre|dispensary)\b/i.test(l)) {
+    // Only allow if it's an explicit clinical test name like "Urine Examination" or "Fasting Glucose"
+    if (!/\b(hemoglobin|blood\s*sugar|glucose|cholesterol|creatinine|platelet|wbc|rbc|tsh|bilirubin|sgpt|sgot|urea|urine|albumin|electrolytes?)\b/i.test(l)) {
+      return true;
+    }
+  }
+
+  // Doctor, Physician, Patient, Staff, Client info
+  if (/^(patient|dr\.|doctor|physician|consultant|referred\s*by|ref\s*by|mr\.|mrs\.|ms\.|master|prof\.)\b/i.test(l)) return true;
+  if (/\b(patient\s*name|patient\s*id|uhid|ipd|opd|reg\.?\s*no|age\s*\/\s*gender|years?\s*\/\s*(male|female)|sex\s*:\s*(male|female)|gender\s*:)\b/i.test(l)) return true;
+
+  // Sample, collection, report processing metadata
+  if (/\b(sample\s*(id|type|collected|received|date)|specimen|collected\s*(at|on)|received\s*on|reported\s*on|report\s*date|printed\s*on)\b/i.test(l)) return true;
+  if (/\b(end\s*of\s*report|page\s*\d+\s*(of|\/)\s*\d+|signature|technologist|verified\s*by|approved\s*by|pathologist|biochemist)\b/i.test(l)) return true;
+
+  // Contact / Address info / GST
+  if (/\b(phone|tel[:.]|mobile|email|website|fax[:.]|gstin|pin\s*code|road|street|nagar|floor|block)\b/i.test(l)) return true;
+  if (/\b(methodology|method\s*:|note\s*:|clinical\s*correlation|disclaimer|accredited|nabl|iso\s*\d+)\b/i.test(l)) return true;
+
+  return false;
 };
 
 /**
- * Parse a single line of a lab report.
- * Returns null if the line looks like a header / non-data line.
+ * Extract reference range pattern from a line.
+ * Matches: "12.0 - 15.0", "< 200", "> 40", "<= 100", "upto 150", "(12.0 - 15.0)", "12.0 to 15.0"
  */
+const extractRefRangeFromLine = (
+  line: string
+): { refRange: string; cleanLine: string } => {
+  // Matches compound range or inequality expressions
+  const rangeRe = /(?:\(?\s*(?:ref(?:erence)?\s*(?:range|interval)?:?)?\s*)?([<>]?=?\s*\d+(?:\.\d+)?\s*(?:-|–|—|to)\s*\d+(?:\.\d+)?|[<>]=?\s*\d+(?:\.\d+)?|\bupto\s*\d+(?:\.\d+)?|\bless\s*than\s*\d+(?:\.\d+)?)\)?/i;
+  const match = line.match(rangeRe);
+
+  if (match && match.index !== undefined) {
+    const refRange = match[1].replace(/\s+/g, ' ').trim();
+    // Remove the reference range completely from the line so its numbers don't conflict with patient result
+    const cleanLine = (line.substring(0, match.index) + ' ' + line.substring(match.index + match[0].length)).trim();
+    return { refRange, cleanLine };
+  }
+
+  return { refRange: '', cleanLine: line };
+};
+
 interface ParsedRow {
   testName: string;
   value: number;
@@ -590,85 +635,126 @@ interface ParsedRow {
   category: string;
 }
 
-const HEADER_RE = /^(patient|dr\.|date:|age:|sex:|gender|sample|barcode|report\s*no|test\s*name|investigation|parameter|haematology|biochemistry|clinical pathology|differential leucocyte|ref(erence)?\s*(range)?|method|specimen|collected|printed|page\s*\d|~~~ end)/i;
-const SKIP_LINE_RE = /^[\s\-=*_|]+$/;
-
+/**
+ * Accurate line parser:
+ * 1. Checks and ignores metadata/facility lines.
+ * 2. Extracts reference range FIRST and removes it from the line.
+ * 3. Identifies the medical unit and clinical flag (H/L/High/Low).
+ * 4. Extracts the patient's actual result value (the remaining standalone number).
+ * 5. Validates the test name to prevent hospital names or junk from passing.
+ */
 const parseLine = (raw: string): ParsedRow | null => {
-  const line = raw.trim();
-  if (!line || line.length < 4) return null;
-  if (HEADER_RE.test(line)) return null;
-  if (SKIP_LINE_RE.test(line)) return null;
+  let line = raw.trim();
+  if (isMetadataLine(line)) return null;
 
-  // Normalise thousands separators e.g. 1,200 → 1200
-  const normalised = line.replace(/(\d),(\d{3})/g, '$1$2');
+  // Strip leading list numbers: "1. ", "02) ", "3 - "
+  line = line.replace(/^\s*\d+[\.\)\-]\s+/, '').trim();
+  if (line.length < 3) return null;
 
-  // Try to find a numeric value + unit pair in the line.
-  // We scan from right-to-left-ish: split on common separators and look for the value.
-  // Pattern: <TestName> <optional flag H/L> <value> <unit> <optional ref range> <optional flag>
-  const valueUnitRe = new RegExp(
-    `(\\d+(?:\\.\\d+)?)\\s*(${MEDICAL_UNITS.map(u => u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`,
-    'i'
-  );
+  // Normalise thousands separators (e.g. 6,500 -> 6500)
+  line = line.replace(/(\d),(\d{3})/g, '$1$2');
 
-  const match = normalised.match(valueUnitRe);
-  if (!match || match.index === undefined) {
-    // Try bare number approach (unit may be in a separate column/token)
-    const bareMatch = normalised.match(
-      /^([A-Za-z][A-Za-z0-9\s\-/().,']+?)\s+(H|L|HIGH|LOW|\*)?\s*([\d.]+)\s*(H|L|HIGH|LOW|\*)?\s*([\d.]+\s*[-–]\s*[\d.]+|[<>]\s*[\d.]+)?/i
-    );
-    if (!bareMatch) return null;
+  // 1. Extract and isolate Reference Range from line
+  const { refRange, cleanLine } = extractRefRangeFromLine(line);
+  let workingLine = cleanLine;
 
-    const rawName = bareMatch[1].replace(/[:=|_\-]+$/, '').trim();
-    if (rawName.length < 2 || HEADER_RE.test(rawName)) return null;
-
-    const flag = (bareMatch[2] || bareMatch[4] || '').toUpperCase();
-    const value = parseFloat(bareMatch[3]);
-    const refRange = bareMatch[5] ? bareMatch[5].replace(/\s+/g, ' ').trim() : '';
-    const testName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-
-    return {
-      testName,
-      value,
-      unit: '',
-      referenceRange: refRange,
-      isAbnormal: isValueAbnormal(value, refRange, flag),
-      category: inferCategory(testName),
-    };
+  // 2. Extract Clinical Flag (H, L, High, Low, Normal, Abnormal, *)
+  let flag = '';
+  const flagMatch = workingLine.match(/\b(H|L|HIGH|LOW|NORMAL|ABNORMAL|\*)\b/i);
+  if (flagMatch) {
+    flag = flagMatch[1].toUpperCase();
+    workingLine = workingLine.replace(new RegExp(`\\b${flagMatch[1]}\\b`, 'i'), ' ').trim();
   }
 
-  // We found a "number unit" pair
-  const valueStr = match[1];
-  const unit = match[2];
-  const value = parseFloat(valueStr);
-  const matchStart = match.index;
+  // 3. Extract Medical Unit
+  let unit = '';
+  let unitIndex = -1;
+  let matchedUnitStr = '';
 
-  // Everything before the number is the test name (and possibly a H/L flag)
-  const beforeValue = normalised.substring(0, matchStart).trim();
-  // Flag may be immediately before the number
-  const flagBeforeMatch = beforeValue.match(/\b(H|L|HIGH|LOW|ABNORMAL|\*)\s*$/i);
-  const flag = flagBeforeMatch ? flagBeforeMatch[1].toUpperCase() : '';
-  const rawName = beforeValue.replace(/\s*(H|L|HIGH|LOW|ABNORMAL|\*)\s*$/i, '').replace(/[:=|_\-]+$/, '').trim();
+  for (const u of MEDICAL_UNITS) {
+    const escaped = u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const unitRe = new RegExp(`(?:^|\\s)(${escaped})(?=[\\s,;:]|$)`, 'i');
+    const uMatch = workingLine.match(unitRe);
+    if (uMatch && uMatch.index !== undefined) {
+      unit = u;
+      matchedUnitStr = uMatch[1];
+      unitIndex = uMatch.index + (uMatch[0].length - matchedUnitStr.length);
+      break;
+    }
+  }
 
-  if (rawName.length < 2) return null;
-  if (HEADER_RE.test(rawName)) return null;
-  // Reject lines where "test name" is just a number or a single character
-  if (/^\d+$/.test(rawName) || rawName.length < 2) return null;
+  // 4. Extract Patient Result Value
+  let value: number | null = null;
+  let testName = '';
 
-  // Everything after the unit: look for ref range and trailing flag
-  const afterUnit = normalised.substring(matchStart + match[0].length).trim();
-  const trailingFlag = afterUnit.match(/^(H|L|HIGH|LOW|ABNORMAL|\*)\b/i);
-  const combinedFlag = flag || (trailingFlag ? trailingFlag[1].toUpperCase() : '');
-  const refRange = extractRefRange(afterUnit);
+  if (unit && unitIndex !== -1) {
+    const beforeUnit = workingLine.substring(0, unitIndex).trim();
+    const afterUnit = workingLine.substring(unitIndex + matchedUnitStr.length).trim();
 
-  const testName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+    // Most common: Result number is immediately before unit ("Hemoglobin 13.5 g/dL")
+    const numBeforeMatch = beforeUnit.match(/(\d+(?:\.\d+)?)\s*$/);
+    if (numBeforeMatch && numBeforeMatch.index !== undefined) {
+      value = parseFloat(numBeforeMatch[1]);
+      testName = beforeUnit.substring(0, numBeforeMatch.index).trim();
+    } else {
+      // Result number is immediately after unit ("g/dL 13.5")
+      const numAfterMatch = afterUnit.match(/^(\d+(?:\.\d+)?)/);
+      if (numAfterMatch) {
+        value = parseFloat(numAfterMatch[1]);
+        testName = beforeUnit;
+      }
+    }
+  }
+
+  // Fallback: If no unit matched, or pattern didn't capture value
+  if (value === null) {
+    // Look for "<Test Name> [: =]? <Number> [optional rest]"
+    const numMatch = workingLine.match(/^([A-Za-z0-9\s()/\-\.+'%]+?)\s*[:=]?\s+(\d+(?:\.\d+)?)(?:\s+(.*))?$/);
+    if (numMatch) {
+      const candidateName = numMatch[1].trim();
+      const numVal = parseFloat(numMatch[2]);
+      const rest = numMatch[3] ? numMatch[3].trim() : '';
+
+      value = numVal;
+      testName = candidateName;
+
+      if (!unit && rest) {
+        for (const u of MEDICAL_UNITS) {
+          if (rest.toLowerCase().startsWith(u.toLowerCase())) {
+            unit = u;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if (value === null || isNaN(value)) return null;
+
+  // Clean test name
+  testName = testName.replace(/[:=|\-_/]+$/, '').trim();
+  testName = testName.replace(/^[0-9\.\)\-]+\s*/, '').trim();
+
+  // Validate test name length and content
+  if (testName.length < 2 || testName.length > 55) return null;
+  // Reject pure numbers or punctuation
+  if (/^[\d\s.,\-+()]+$/.test(testName)) return null;
+  // Reject any test name containing hospital / clinic / administrative words
+  if (/\b(hospital|hospitals|clinic|clinics|diagnostics|pathology|laboratory|laboratories|dr\.|doctor|patient|address|phone|department|centre|center)\b/i.test(testName)) {
+    return null;
+  }
+
+  const cleanTestName = testName.charAt(0).toUpperCase() + testName.slice(1);
+  const isAbnormal = isValueAbnormal(value, refRange, flag);
+  const category = inferCategory(cleanTestName);
 
   return {
-    testName,
+    testName: cleanTestName,
     value,
     unit,
     referenceRange: refRange,
-    isAbnormal: isValueAbnormal(value, refRange, combinedFlag),
-    category: inferCategory(testName),
+    isAbnormal,
+    category,
   };
 };
 
