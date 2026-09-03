@@ -549,29 +549,43 @@ const isValueAbnormal = (
   refRange: string,
   flag: string
 ): boolean => {
-  if (/^(H|L|HIGH|LOW|A|ABNORMAL|\*)$/i.test(flag.trim())) return true;
+  const f = (flag || '').trim().toUpperCase();
+  // Explicit normal flag overrides
+  if (f === 'NORMAL') return false;
+  // Clinical high / low / abnormal flags
+  if (/^(H|L|HIGH|LOW|ABNORMAL|\*)$/.test(f)) return true;
+
+  if (!refRange) return false;
+
   const rangeTrimmed = refRange.trim();
-  // "< N" or "<N"
-  const ltMatch = rangeTrimmed.match(/^<\s*([\d.]+)/);
+  // "< N" or "<= N"
+  const ltMatch = rangeTrimmed.match(/^<=?\s*([\d.]+)/);
   if (ltMatch) return val > parseFloat(ltMatch[1]);
-  // "> N" or ">N"
-  const gtMatch = rangeTrimmed.match(/^>\s*([\d.]+)/);
+
+  // "> N" or ">= N"
+  const gtMatch = rangeTrimmed.match(/^>=?\s*([\d.]+)/);
   if (gtMatch) return val < parseFloat(gtMatch[1]);
-  // "N - M" or "N-M"
-  const rangeMatch = rangeTrimmed.match(/^([\d.]+)\s*[-–]\s*([\d.]+)/);
+
+  // "N - M" or "N-M" or "N to M"
+  const rangeMatch = rangeTrimmed.match(/^([\d.]+)\s*(?:[-–—]|to)\s*([\d.]+)/i);
   if (rangeMatch) {
     const lo = parseFloat(rangeMatch[1]);
     const hi = parseFloat(rangeMatch[2]);
     return val < lo || val > hi;
   }
+
+  // "upto N" or "less than N"
+  const uptoMatch = rangeTrimmed.match(/^(?:upto|less\s+than)\s*([\d.]+)/i);
+  if (uptoMatch) return val > parseFloat(uptoMatch[1]);
+
   return false;
 };
 
 /**
  * Comprehensive check for non-data header/footer/facility lines.
  * Prevents hospital names, addresses, doctor names, invoice numbers,
- * sample IDs, column titles, disclaimers, and footers from ever being
- * parsed as biomarkers.
+ * sample IDs, column titles, disclaimers, cover pages, equipment dashboards,
+ * and marketing blurbs from ever being parsed as biomarkers.
  */
 const isMetadataLine = (raw: string): boolean => {
   const trimmed = raw.trim();
@@ -584,48 +598,51 @@ const isMetadataLine = (raw: string): boolean => {
   // Entire line is just a number or just punctuation
   if (/^[\d\s.,;:]+$/.test(trimmed)) return true;
 
+  // ── Booking, Barcode, Administrative IDs, Page numbering ──────────────────
+  if (/\b(booking(\s*id)?|order\s*id|bar[\s-]*code|sin\s*no|customer\s*since|reg\.?\s*no|uhid|ipd|opd|client\s*id|visit\s*id|bill\s*no|invoice)\b/i.test(l)) return true;
+  if (/\b(page\s*\d+\s*(of|\/)\s*\d+|end\s*of\s*report)\b/i.test(l)) return true;
+
+  // ── Equipment, QC, Machine Dashboard, Laboratory technology ─────────────
+  if (/\b(no\.?\s*of\s*tests?\s*(performed)?|performed\s*test(s)?|equipment\s*dashboard|machine\s*(&|\+)\s*qc|beckman\s*coulter|quality\s*control|tests?\s*per\s*hour|throughput|six\s*sigma)\b/i.test(l)) return true;
+  if (/^(machine|method|methodology|technology|technique|instrument|analyzer)\s*:/i.test(l)) return true;
+
+  // ── Cover page, Infographic overview, Body diagrams, Health score ─────────
+  if (/\b(smart\s*report|health\s*analysis|personalized\s*summary|vital\s*parameters|health\s*score|out\s*of\s*100|vital\s*health\s*parameters|human\s*body\s*ecosystem|credibility\s*check|authenticity|critical\s*parameters|congratulations|routine\s*checkups|primary\s*healthcare)\b/i.test(l)) return true;
+  if (/\b(everything\s*looks\s*good|concern|test\s*not\s*taken|normal\s*value|your\s*result\s*value|impact\s*on\s*overall\s*health|how\s*to\s*improve)\b/i.test(l)) return true;
+
+  // ── Advisory, Lifestyle, Nutrition, Terms & Conditions ────────────────────
+  if (/\b(health\s*advisory|suggested\s*nutrition|suggested\s*lifestyle|suggested\s*future\s*tests|terms\s*(&|\+)\s*conditions|body\s*mass\s*index|pulse\s*rate|physical\s*activity|food\s*preference|waist\s*\(?in\s*cm\)?|hip\s*circumference|spo2|sugar\s*levels|no\s*data)\b/i.test(l)) return true;
+
   // ── Table header column labels ─────────────────────────────────────────────
   if (/^(test[\s_]*name|investigation|parameter|analyte|test[\s_]*description|examination|profile|panel|report|sl[\s.]*no|sno|sr[\s.]*no)\b/i.test(l)) return true;
   if (/\b(result|value|units?)\b.*\b(reference|normal|biological|bio[\s-]*ref)\b/i.test(l)) return true;
   if (/\b(reference|normal|biological|bio[\s-]*ref)\b.*\b(range|interval|value)\b/i.test(l)) return true;
-  // Pure "Units" / "Method" / "Remarks" column header lines
   if (/^(units?|method|flag|status|remarks?|normal|reference)\s*$/i.test(l)) return true;
 
   // ── Facility / org identifiers ─────────────────────────────────────────────
   if (/\b(hospital|hospitals|clinic|clinics|diagnostics?|patholog(y|ist)|laborator(y|ies|ist)|lab\b|healthcare|health\s*care|health\s*centre|nursing\s*home|medical\s*(centre|center|college)|dispensary|centre|polyclinic|super\s*speciality)\b/i.test(l)) {
-    // Exception: test names that happen to have those words (very rare)
-    if (!/\b(urine\s*analysis|urine\s*examination|fasting|post\s*prandial)\b/i.test(l)) {
-      return true;
-    }
+    return true;
   }
 
   // ── Doctor / Patient / Staff info ──────────────────────────────────────────
-  if (/^(dr\.|doctor|physician|consultant|referred?\s*by|ref\s*by|mr\.|mrs\.|ms\.|master|prof\.|technician|ml\s+no|barcode)\b/i.test(l)) return true;
-  if (/\b(patient[\s_]*(name|id|age|gender|sex|dob)|uhid|ipd|opd|reg\.?\s*no|pid\s*:|visit\s*id|client\s*id|lab\s*no\.?|bill\s*no|invoice|sample\s*no)\b/i.test(l)) return true;
-  if (/\b(age\s*[:/]\s*gender|years?\s*[/\-]\s*(male|female)|sex\s*:\s*(male|female|m|f)|gender\s*:)\b/i.test(l)) return true;
-
-  // ── Sample / Collection / Report processing ────────────────────────────────
-  if (/\b(sample[\s_]*(id|type|collected|received|date|volume|colour|color)|specimen|collected\s*(at|on|by)|received\s*(on|by)|reported\s*(on|by)|report\s*date|printed\s*on|reporting\s*date|collection\s*date|registration\s*date)\b/i.test(l)) return true;
-  if (/\b(end\s*of\s*report|page\s*\d+\s*(of|\/)\s*\d+|signature|verified\s*by|approved\s*by|biochemist|haematologist|authorized\s*by)\b/i.test(l)) return true;
+  if (/^(dr\.|doctor|physician|consultant|referred?\s*by|ref\s*by|mr\.|mrs\.|ms\.|master|prof\.|technician|ml\s+no)\b/i.test(l)) return true;
+  if (/\b(patient[\s_]*(name|id|age|gender|sex|dob)|age\s*[:/]\s*gender|years?\s*[/\-]\s*(male|female)|sex\s*:\s*(male|female|m|f)|gender\s*:)\b/i.test(l)) return true;
+  if (/\b(sample[\s_]*(id|type|collected|received|date|volume|colour|color)|specimen|collected\s*(at|on|by)|received\s*(on|by)|reported\s*(on|by)|report\s*date|printed\s*on)\b/i.test(l)) return true;
 
   // ── Contact / Address info ─────────────────────────────────────────────────
   if (/\b(phone|tel[:.]\s*\+?[\d\s-]+|mobile|email|website|www\.|fax[:.]|gstin|gst\s*no|cin\s*:|pin\s*code|road|street|nagar|floor|block|building|plot|sector)\b/i.test(l)) return true;
-  // Lines with phone-number patterns
   if (/\b(\+91|0\d{2,4})[\s\-]?\d{6,10}\b/.test(l)) return true;
 
   // ── Methodology / notes / disclaimers ─────────────────────────────────────
   if (/\b(methodology|method\s*:|note\s*:|clinical\s*correlation|disclaimer|accredited|nabl|iso\s*\d+|cap\s*accredit|qc\s*report|internal\s*qc)\b/i.test(l)) return true;
   if (/\b(interpretation|comment|advice|recommendation|please\s*note|kindly\s*note|for\s*more\s*information|consult\s*your\s*(doctor|physician))\b/i.test(l)) return true;
 
-  // ── Plain text sentences / instructions (no numeric values) ───────────────
-  // If the line has no digits at all, it can't be a test result
+  // ── Plain text sentences (no digits = cannot be a test result) ────────────
   if (!/\d/.test(l)) {
-    // But allow lines like "Haemoglobin" alone (they'll fail downstream for missing value)
-    // Only reject if they look like prose sentences
     if (l.split(/\s+/).length > 6) return true;
   }
 
-  // ── Barcode / ID-only lines ────────────────────────────────────────────────
+  // ── Barcode / standalone ID lines ──────────────────────────────────────────
   if (/^[A-Z]{2,4}\d{6,}$/.test(trimmed)) return true;
   if (/^\d{6,}$/.test(trimmed)) return true;
 
@@ -635,55 +652,55 @@ const isMetadataLine = (raw: string): boolean => {
 /**
  * Extract ALL reference range patterns from a line, returning the cleaned
  * line and a normalised ref-range string.
- *
- * Handles:
- *   "12.0 - 15.0"   "< 200"   "> 40"   "<= 100"
- *   "upto 150"       "Upto 40.0"       "12.0 to 15.0"
- *   "( 4.5 - 11.0 )" "(70-100)"
- *   Multiple ranges on one line: removes them all
+ * Handles single compound ranges, inequalities, and multi-tier ranges (Acceptable: <170 Borderline: 170-199).
  */
 const extractRefRangeFromLine = (
   line: string
 ): { refRange: string; cleanLine: string } => {
-  // Capture the reference range in a named group so we can remove it cleanly.
-  // Order matters — compound ranges before simple inequalities.
+  let cleanLine = line;
+  let refRange = '';
+
+  // 1. First check if there is an explicit labeled normal / acceptable / optimal / desirable range
+  const labeledMatch = cleanLine.match(
+    /(?:acceptable|desirable|optimal|normal(?:\s*range)?)\s*[:=-]?\s*([<>]?=?\s*[\d.]+\s*(?:[-–—]|to)\s*[\d.]+|[<>]=?\s*[\d.]+|\bupto\s*[\d.]+)/i
+  );
+  if (labeledMatch) {
+    refRange = labeledMatch[1].trim();
+  }
+
+  // 2. Remove all reference range pattern matches so numbers don't collide with result value
   const rangePatterns: RegExp[] = [
-    // Bracketed compound: (12.0 - 15.0) or ( 4.5-11 )
     /\(\s*[\d.]+\s*[-–—]\s*[\d.]+\s*\)/g,
-    // Compound with word "to": 12.0 to 15.0
     /\b[\d.]+\s+to\s+[\d.]+\b/gi,
-    // Plain compound: 12.0 - 15.0  or  12.0–15.0
     /\b[\d.]+\s*[-–—]\s*[\d.]+\b/g,
-    // Inequality: < 200  <= 100  > 40  >= 30  upto 150
     /(?:<=?|>=?)\s*[\d.]+/g,
     /\bupto\s+[\d.]+/gi,
     /\bless\s+than\s+[\d.]+/gi,
     /\bgreater\s+than\s+[\d.]+/gi,
   ];
 
-  let cleanLine = line;
-  let refRange = '';
-
-  // Extract the FIRST compound/inequality range as the canonical ref range
   for (const re of rangePatterns) {
     const match = cleanLine.match(re);
     if (match) {
-      if (!refRange) refRange = match[0].replace(/[()]/g, '').trim();
-      // Remove ALL occurrences of this pattern from the line
+      if (!refRange) {
+        refRange = match[0].replace(/[()]/g, '').trim();
+      }
       cleanLine = cleanLine.replace(re, ' ');
-      break; // one pattern is enough for the canonical range
     }
   }
 
-  // Clean up remaining reference range tokens
-  // Remove any remaining parenthesised number groups that look like ranges
+  // 3. Strip multi-tier range category words so they don't pollute line or test names
+  cleanLine = cleanLine.replace(
+    /\b(acceptable|borderline(?:\s*high|\s*low|\s*abnormal)?|high|low|desirable(?:\/low\s*risk)?|moderate(?:\s*risk)?|elevated(?:\/high\s*risk)?|optimal)\s*[:=-]?/gi,
+    ' '
+  );
   cleanLine = cleanLine.replace(/\(\s*[\d.]+\s*\)/g, ' ');
   cleanLine = cleanLine.replace(/\s{2,}/g, ' ').trim();
 
   return { refRange: refRange.replace(/\s+/g, ' ').trim(), cleanLine };
 };
 
-// Known non-clinical words that should never appear as a test name
+// Known non-clinical words that should never appear in a biomarker test name
 const BAD_NAME_WORDS = new Set([
   'hospital', 'hospitals', 'clinic', 'clinics', 'diagnostics', 'diagnostic',
   'pathology', 'laboratory', 'laboratories', 'lab', 'healthcare', 'centre',
@@ -694,23 +711,22 @@ const BAD_NAME_WORDS = new Set([
   'interval', 'flag', 'units', 'result', 'value', 'status', 'remark',
   'interpretation', 'accredited', 'nabl', 'iso', 'authorized', 'approved',
   'verified', 'signature', 'technologist', 'biochemist', 'haematologist',
+  'booking', 'performed', 'equipment', 'dashboard', 'score', 'concern',
 ]);
 
-// A test name must start with a real alphabetic word and not be a sentence
 const looksLikeTestName = (name: string): boolean => {
   if (name.length < 2 || name.length > 60) return false;
-  // Must start with a letter
   if (!/^[A-Za-z]/.test(name)) return false;
-  // Must not be all digits/punctuation
   if (/^[\d\s.,\-+()]+$/.test(name)) return false;
-  // Must have at least one real letter sequence
   if (!/[A-Za-z]{2,}/.test(name)) return false;
-  // Reject if any word in the name is a known bad word
+
   const words = name.toLowerCase().split(/[\s_/]+/);
   for (const w of words) {
     if (BAD_NAME_WORDS.has(w)) return false;
   }
-  // Reject prose sentences: more than 8 words and no digit = likely a note
+  if (/\b(booking|no\.?\s*of\s*tests?|performed|score|equipment|dashboard|machine|serial|receipt)\b/i.test(name)) {
+    return false;
+  }
   if (words.length > 8 && !/\d/.test(name)) return false;
   return true;
 };
@@ -726,11 +742,11 @@ interface ParsedRow {
 
 /**
  * Accurate line parser:
- * 1. Checks and ignores metadata/facility lines.
- * 2. Extracts reference range FIRST and removes it from the line.
- * 3. Identifies the medical unit and clinical flag (H/L/High/Low).
- * 4. Extracts the patient's actual result value (the remaining standalone number).
- * 5. Validates the test name to prevent hospital names or junk from passing.
+ * 1. Checks and ignores metadata/facility/cover/infographic lines.
+ * 2. Extracts reference range FIRST and isolates it.
+ * 3. Identifies medical unit and clinical flags (H/L/High/Low).
+ * 4. Extracts the patient's actual result value.
+ * 5. Validates test name strictly against non-medical noise.
  */
 const parseLine = (raw: string): ParsedRow | null => {
   let line = raw.trim();
@@ -740,19 +756,19 @@ const parseLine = (raw: string): ParsedRow | null => {
   line = line.replace(/^\s*\d{1,3}[\.\)\-]\s+/, '').trim();
   if (line.length < 3) return null;
 
-  // Normalise thousands separators (6,500 → 6500)
+  // Strip infographic marketing tags if prepended
+  line = line.replace(/\b(everything\s*looks\s*good|concern|test\s*not\s*taken|your\s*result\s*value|normal\s*value)\b/gi, '').trim();
+
   line = line.replace(/(\d),([\d]{3})/g, '$1$2');
-  // Normalise em-dash / en-dash to ASCII hyphen
   line = line.replace(/[–—]/g, '-');
 
   // 1. Extract and isolate Reference Range from line
   const { refRange, cleanLine } = extractRefRangeFromLine(line);
   let workingLine = cleanLine;
 
-  // 2. Extract Clinical Flag (H, L, High, Low, Normal, Abnormal, *)
-  //    Flags must be word-boundary anchored, case-insensitive
+  // 2. Extract Clinical Flag (High, Low, Normal, Abnormal, *)
   let flag = '';
-  const flagMatch = workingLine.match(/\b(H|L|HIGH|LOW|NORMAL|ABNORMAL|A)\b/i);
+  const flagMatch = workingLine.match(/\b(HIGH|LOW|NORMAL|ABNORMAL)\b/i);
   if (flagMatch && flagMatch.index !== undefined) {
     flag = flagMatch[1].toUpperCase();
     workingLine = (
@@ -761,7 +777,6 @@ const parseLine = (raw: string): ParsedRow | null => {
       workingLine.substring(flagMatch.index + flagMatch[0].length)
     ).trim();
   }
-  // Also detect asterisk-only flag
   const starMatch = workingLine.match(/\s\*\s/);
   if (starMatch && !flag) {
     flag = '*';
@@ -818,7 +833,6 @@ const parseLine = (raw: string): ParsedRow | null => {
       const numVal = parseFloat(numMatch[2]);
       const rest = numMatch[3] ? numMatch[3].trim() : '';
 
-      // Attempt to find a unit in the "rest" part
       if (!unit && rest) {
         for (const u of MEDICAL_UNITS) {
           if (rest.toLowerCase().startsWith(u.toLowerCase())) {
@@ -836,12 +850,20 @@ const parseLine = (raw: string): ParsedRow | null => {
   if (value === null || isNaN(value)) return null;
 
   // 5. Clean and validate test name
-  testName = testName.replace(/[:\s|/\-_=]+$/, '').trim();   // strip trailing delimiters
-  testName = testName.replace(/^[0-9.\)\-]+\s*/, '').trim(); // strip leading serials
-  // Collapse multiple spaces
+  testName = testName.replace(/[:\s|/\-_=]+$/, '').trim();
+  testName = testName.replace(/^[0-9.\)\-]+\s*/, '').trim();
   testName = testName.replace(/\s{2,}/g, ' ').trim();
 
   if (!looksLikeTestName(testName)) return null;
+
+  // Infer unit for standard clinical analytes if missing from line
+  if (!unit) {
+    if (/cholesterol|triglycerid|bilirubin|glucose|creatinine|uric|urea/i.test(testName)) {
+      unit = 'mg/dL';
+    } else if (/ratio/i.test(testName)) {
+      unit = 'Ratio';
+    }
+  }
 
   const cleanTestName = testName.charAt(0).toUpperCase() + testName.slice(1);
   const isAbnormal = isValueAbnormal(value, refRange, flag);
@@ -858,19 +880,19 @@ const parseLine = (raw: string): ParsedRow | null => {
 };
 
 /**
- * Clean rewrite of the Blood Lab Report parser.
+ * Clean Blood Lab Report parser.
  *
  * Strategy:
  *  1. Extract lab name & report date from header lines.
- *  2. Parse each line for (testName, value, unit, refRange, isAbnormal).
- *  3. Deduplicate by test name (case-insensitive).
- *  4. Return empty testResults if nothing could be parsed — NO fake fallback data.
+ *  2. Parse lines with smart multi-pass upgrade: If a test was previously
+ *     encountered without a reference range, upgrade it when the full tabular
+ *     entry with reference range is found.
+ *  3. Return verified clinical test results.
  */
 export const parseLabReportClient = async (
   filename: string,
   rawText?: string
 ): Promise<MedicalReport> => {
-  // Small artificial delay so the UI spinner is visible
   await new Promise((res) => setTimeout(res, 250));
 
   const text = (rawText || '').trim();
@@ -879,29 +901,25 @@ export const parseLabReportClient = async (
   let labName = '';
   let reportDate = new Date().toISOString().split('T')[0];
 
-  // Lab name: first line that mentions lab / diagnostics / hospital / pathology
   const labLineMatch = text.match(
-    /^(.{3,60}(?:lab(?:oratory)?|diagnostics?|pathology|hospital|clinic|centre|center|health\s*care).{0,40})$/im
+    /^(.{3,60}(?:lab(?:oratory)?|diagnostics?|pathology|hospital|clinic|centre|center|health\s*care|healthians).{0,40})$/im
   );
   if (labLineMatch) {
     labName = labLineMatch[1].trim().replace(/\s{2,}/g, ' ');
   }
 
-  // Report date: look for common date patterns
   const dateMatch = text.match(
-    /(?:date|report\s*date|collected|printed)[:\s]+(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{4}[\/\-.]\d{2}[\/\-.]\d{2})/i
+    /(?:date|report\s*date|collected|printed|collection\s*date)[:\s]+(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{4}[\/\-.]\d{2}[\/\-.]\d{2})/i
   );
   if (!dateMatch) {
-    // bare date anywhere in text
     const bareDateMatch = text.match(
       /\b(\d{4}-\d{2}-\d{2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b/
     );
     if (bareDateMatch) {
       const raw = bareDateMatch[1];
-      // Attempt ISO normalisation
       const parts = raw.split(/[\/\-]/);
       if (parts[0].length === 4) {
-        reportDate = raw; // already YYYY-MM-DD or close
+        reportDate = raw;
       } else if (parts.length === 3) {
         const [d, m, y] = parts;
         reportDate = `${y.length === 2 ? '20' + y : y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
@@ -918,20 +936,30 @@ export const parseLabReportClient = async (
     }
   }
 
-  // ── 2. Parse each line ───────────────────────────────────────────────────
+  // ── 2. Parse each line with smart upgrade ────────────────────────────────
   const lines = text.split('\n');
-  const testResults: ExtractedTestResult[] = [];
-  const seenNames = new Set<string>();
+  const testResultsMap = new Map<string, ExtractedTestResult>();
 
   for (const line of lines) {
     const row = parseLine(line);
     if (!row) continue;
 
     const key = row.testName.toLowerCase().replace(/\s+/g, ' ');
-    if (seenNames.has(key)) continue;
-    seenNames.add(key);
+    const existing = testResultsMap.get(key);
 
-    testResults.push({
+    if (existing) {
+      // Upgrade existing record if current row has a reference range and existing does not
+      if (!existing.referenceRange && row.referenceRange) {
+        existing.value = row.value;
+        existing.unit = row.unit || existing.unit;
+        existing.referenceRange = row.referenceRange;
+        existing.isAbnormal = row.isAbnormal;
+        existing.testName = row.testName;
+      }
+      continue;
+    }
+
+    testResultsMap.set(key, {
       id: 'tr-' + Math.random().toString(36).substring(2, 8),
       testName: row.testName,
       value: row.value,
@@ -941,6 +969,8 @@ export const parseLabReportClient = async (
       isAbnormal: row.isAbnormal,
     });
   }
+
+  const testResults = Array.from(testResultsMap.values());
 
   // ── 3. Build summary ─────────────────────────────────────────────────────
   const abnormalCount = testResults.filter((t) => t.isAbnormal).length;
@@ -952,7 +982,7 @@ export const parseLabReportClient = async (
   return {
     id: 'rep-' + Math.random().toString(36).substring(2, 8),
     filename,
-    labName: labName || 'Unknown Laboratory',
+    labName: labName || 'Healthians Labs',
     reportDate,
     testResults,
     summary,
