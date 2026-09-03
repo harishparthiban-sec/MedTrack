@@ -339,6 +339,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
             </div>
+          ) : activeSchedules.length === 0 ? (
+            <div className={`rounded-3xl p-8 text-center space-y-3 border ${cardBg}`}>
+              <Pill className="w-12 h-12 text-emerald-500 mx-auto" />
+              <h3 className={`text-xl font-extrabold ${titleText}`}>No Active Medication Schedules</h3>
+              <p className={`text-xs ${bodyText}`}>Upload your doctor prescription to automatically schedule daily doses and reminders.</p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('upload')}
+                className="mt-2 px-5 py-2.5 rounded-xl btn-primary-visible text-xs font-extrabold inline-flex items-center space-x-2 cursor-pointer shadow-sm"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Upload Prescription</span>
+              </button>
+            </div>
           ) : (
             <div className={`rounded-3xl p-8 text-center space-y-3 border ${cardBg}`}>
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
@@ -444,67 +458,182 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <span>Lab Test Progress</span>
               </h3>
 
-              <button
-                onClick={() => setActiveTab('comparison')}
-                className="text-xs font-extrabold text-indigo-500 hover:text-indigo-400"
-              >
-                Full Analysis
-              </button>
+              {reports.length > 0 && (
+                <button
+                  onClick={() => setActiveTab(reports.length >= 2 ? 'comparison' : 'reports')}
+                  className="text-xs font-extrabold text-indigo-500 hover:text-indigo-400 cursor-pointer"
+                >
+                  {reports.length >= 2 ? 'Full Analysis' : 'View in History'}
+                </button>
+              )}
             </div>
 
-            {/* Biomarker Trend Items */}
-            <div className="space-y-3.5 text-xs font-bold">
-              <div className={`p-3.5 rounded-2xl border flex items-center justify-between ${subCardBg}`}>
-                <div>
-                  <span className={`block text-[11px] ${labelText}`}>HbA1c (Diabetes)</span>
-                  <span className="text-emerald-500 font-extrabold text-sm">6.2% (Normal)</span>
+            {/* Dynamic Biomarker Items from User's Real Uploaded Reports */}
+            {reports.length === 0 ? (
+              <div className="text-center py-6 space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-500 mx-auto">
+                  <BarChart3 className="w-6 h-6" />
                 </div>
-                <span className="px-2.5 py-1 rounded-xl text-[10px] bg-emerald-500/20 text-emerald-600 border border-emerald-500/30 flex items-center">
-                  <TrendingDown className="w-3 h-3 mr-1" /> Improved
-                </span>
+                <div className="space-y-1">
+                  <h4 className={`text-sm font-extrabold ${titleText}`}>No Lab Reports Uploaded Yet</h4>
+                  <p className={`text-xs font-medium ${bodyText}`}>
+                    Upload your blood report PDF to monitor and analyze your real clinical biomarkers over time.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('upload')}
+                  className="px-4 py-2 rounded-xl btn-primary-visible text-xs font-extrabold inline-flex items-center space-x-1.5 cursor-pointer shadow-sm"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload Blood Report</span>
+                </button>
               </div>
+            ) : reports.length === 1 ? (
+              /* Single Report: Show key extracted real biomarkers from user's report */
+              <div className="space-y-3 text-xs font-bold">
+                <div className="text-[11px] text-slate-400 font-semibold flex items-center justify-between">
+                  <span>{reports[0].filename}</span>
+                  <span>{reports[0].reportDate}</span>
+                </div>
+                {reports[0].testResults.slice(0, 4).map((t, idx) => (
+                  <div key={idx} className={`p-3 rounded-2xl border flex items-center justify-between ${subCardBg}`}>
+                    <div>
+                      <span className={`block text-[11px] ${labelText}`}>{t.testName}</span>
+                      <span className={`font-extrabold text-sm ${t.isAbnormal ? 'text-amber-500' : 'text-emerald-500'}`}>
+                        {t.value} {t.unit}
+                      </span>
+                    </div>
+                    <span
+                      className={`px-2.5 py-1 rounded-xl text-[10px] border flex items-center ${
+                        t.isAbnormal
+                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/30'
+                          : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/30'
+                      }`}
+                    >
+                      {t.isAbnormal ? '⚠ Out of Range' : '✓ In Range'}
+                    </span>
+                  </div>
+                ))}
+                <p className="text-[10px] text-slate-400 text-center pt-1 font-semibold">
+                  Upload a 2nd report to unlock comparative progress tracking.
+                </p>
+              </div>
+            ) : (
+              /* 2+ Reports: Show comparative trajectory */
+              <div className="space-y-3.5 text-xs font-bold">
+                <div className="text-[11px] text-slate-400 font-semibold flex items-center justify-between">
+                  <span>Comparing latest 2 reports</span>
+                  <span>{reports[0].reportDate}</span>
+                </div>
+                {(() => {
+                  const curr = reports[0];
+                  const prev = reports[1];
+                  const displayTests = curr.testResults.slice(0, 4);
+                  return displayTests.map((tCurr, idx) => {
+                    const tPrev = prev.testResults.find(
+                      (p) => p.testName.toLowerCase() === tCurr.testName.toLowerCase()
+                    );
+                    const improved = tPrev && tPrev.isAbnormal && !tCurr.isAbnormal;
+                    const worsened = tPrev && !tPrev.isAbnormal && tCurr.isAbnormal;
 
-              <div className={`p-3.5 rounded-2xl border flex items-center justify-between ${subCardBg}`}>
-                <div>
-                  <span className={`block text-[11px] ${labelText}`}>Vitamin D</span>
-                  <span className="text-emerald-500 font-extrabold text-sm">35 ng/mL</span>
-                </div>
-                <span className="px-2.5 py-1 rounded-xl text-[10px] bg-emerald-500/20 text-emerald-600 border border-emerald-500/30 flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-1" /> Improved
-                </span>
+                    return (
+                      <div key={idx} className={`p-3.5 rounded-2xl border flex items-center justify-between ${subCardBg}`}>
+                        <div>
+                          <span className={`block text-[11px] ${labelText}`}>{tCurr.testName}</span>
+                          <span className={`font-extrabold text-sm ${tCurr.isAbnormal ? 'text-amber-500' : 'text-emerald-500'}`}>
+                            {tCurr.value} {tCurr.unit}
+                          </span>
+                        </div>
+                        {improved ? (
+                          <span className="px-2.5 py-1 rounded-xl text-[10px] bg-emerald-500/20 text-emerald-600 border border-emerald-500/30 flex items-center gap-1">
+                            <TrendingDown className="w-3 h-3" /> Improved
+                          </span>
+                        ) : worsened ? (
+                          <span className="px-2.5 py-1 rounded-xl text-[10px] bg-amber-500/20 text-amber-600 border border-amber-500/30 flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3" /> Worsened
+                          </span>
+                        ) : tCurr.isAbnormal ? (
+                          <span className="px-2.5 py-1 rounded-xl text-[10px] bg-amber-500/20 text-amber-600 border border-amber-500/30 flex items-center">
+                            Needs Review
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-xl text-[10px] bg-emerald-500/20 text-emerald-600 border border-emerald-500/30 flex items-center">
+                            ✓ Normal
+                          </span>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
-
-              <div className={`p-3.5 rounded-2xl border flex items-center justify-between ${subCardBg}`}>
-                <div>
-                  <span className={`block text-[11px] ${labelText}`}>Fasting Blood Sugar</span>
-                  <span className="text-amber-500 font-extrabold text-sm">118 mg/dL</span>
-                </div>
-                <span className="px-2.5 py-1 rounded-xl text-[10px] bg-amber-500/20 text-amber-600 border border-amber-500/30 flex items-center">
-                  Needs Review
-                </span>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Safety Alert Card */}
-          <div className={`rounded-3xl p-6 space-y-4 border border-amber-500/30 ${isDark ? 'bg-amber-500/5' : 'bg-amber-50'}`}>
-            <div className="flex items-center space-x-3">
-              <ShieldAlert className="w-5 h-5 text-amber-500" />
-              <h4 className={`text-sm font-extrabold ${titleText}`}>Handwritten Safety Check</h4>
-            </div>
+          {/* Safety Alert Card (Dynamic to actual user prescriptions) */}
+          {(() => {
+            const rxWithNote = prescriptions.find((p) => p.notes && p.notes.trim().length > 0);
+            const rxWithAmbiguous = prescriptions.find((p) => p.ambiguousCount > 0);
 
-            <p className={`text-xs font-medium ${bodyText}`}>
-              AI scanned 1 handwritten note in your prescription:{' '}
-              <strong className="text-amber-500">"Take after food with warm water"</strong>.
-            </p>
+            if (rxWithAmbiguous) {
+              return (
+                <div className={`rounded-3xl p-6 space-y-4 border border-amber-500/30 ${isDark ? 'bg-amber-500/5' : 'bg-amber-50'}`}>
+                  <div className="flex items-center space-x-3">
+                    <ShieldAlert className="w-5 h-5 text-amber-500" />
+                    <h4 className={`text-sm font-extrabold ${titleText}`}>Prescription Verification Alert</h4>
+                  </div>
+                  <p className={`text-xs font-medium ${bodyText}`}>
+                    AI scanned {rxWithAmbiguous.ambiguousCount} medicine entry in <strong className="text-amber-500">{rxWithAmbiguous.filename}</strong> flagged for dosage confirmation.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('reports')}
+                    className="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-600 font-extrabold text-xs border border-amber-500/40 cursor-pointer transition-all"
+                  >
+                    Review Flagged Prescription
+                  </button>
+                </div>
+              );
+            }
 
-            <button
-              onClick={() => setActiveTab('upload')}
-              className="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-600 font-extrabold text-xs border border-amber-500/40 cursor-pointer transition-all"
-            >
-              Verify Ambiguous Notes
-            </button>
-          </div>
+            if (rxWithNote) {
+              return (
+                <div className={`rounded-3xl p-6 space-y-4 border border-amber-500/30 ${isDark ? 'bg-amber-500/5' : 'bg-amber-50'}`}>
+                  <div className="flex items-center space-x-3">
+                    <ShieldAlert className="w-5 h-5 text-amber-500" />
+                    <h4 className={`text-sm font-extrabold ${titleText}`}>Doctor Instructions</h4>
+                  </div>
+                  <p className={`text-xs font-medium ${bodyText}`}>
+                    Note from <strong className="text-amber-500">{rxWithNote.filename}</strong>:{' '}
+                    &ldquo;{rxWithNote.notes}&rdquo;
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('reports')}
+                    className="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-600 font-extrabold text-xs border border-amber-500/40 cursor-pointer transition-all"
+                  >
+                    View Prescription Notes
+                  </button>
+                </div>
+              );
+            }
+
+            if (prescriptions.length > 0) {
+              return (
+                <div className={`rounded-3xl p-6 space-y-3 border border-emerald-500/30 ${isDark ? 'bg-emerald-500/5' : 'bg-emerald-50'}`}>
+                  <div className="flex items-center space-x-3">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                    <h4 className={`text-sm font-extrabold ${titleText}`}>Prescriptions Verified</h4>
+                  </div>
+                  <p className={`text-xs font-medium ${bodyText}`}>
+                    All {prescriptions.length} doctor prescription documents verified with high OCR confidence.
+                  </p>
+                </div>
+              );
+            }
+
+            return null;
+          })()}
 
           {/* Quick Shortcuts */}
           <div className={`rounded-3xl p-6 space-y-3 border ${cardBg}`}>
