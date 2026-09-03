@@ -62,7 +62,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       id: 'usr-' + Math.random().toString(36).substr(2, 7),
       name: name || (email.split('@')[0] || 'User'),
       email,
-      streakDays: 1,
+      streakDays: 0,
     };
 
     if (mode === 'signup') {
@@ -80,7 +80,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       id: 'usr-1',
       name: 'Harish Kumar',
       email: 'harish.k@example.com',
-      streakDays: 7,
+      streakDays: 0,
     });
     onClose();
   };

@@ -6,6 +6,7 @@ interface AccountModalProps {
   user: UserProfile | null;
   prescriptionsCount: number;
   reportsCount: number;
+  streakDays?: number;
   isOpen: boolean;
   onClose: () => void;
   onLogout: () => void;
@@ -16,6 +17,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   user,
   prescriptionsCount,
   reportsCount,
+  streakDays = 0,
   isOpen,
   onClose,
   onLogout,
@@ -82,7 +84,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             <span className="flex items-center text-slate-500 dark:text-emerald-200/70">
               <Flame className="w-3.5 h-3.5 mr-2 text-amber-500" /> Adherence Streak
             </span>
-            <span className="text-amber-500 font-extrabold">🔥 {user.streakDays || 7} Days</span>
+            <span className="text-amber-500 font-extrabold">🔥 {streakDays} {streakDays === 1 ? 'Day' : 'Days'}</span>
           </div>
 
           <div className="flex items-center justify-between text-xs font-bold py-1">

@@ -85,7 +85,7 @@ export const registerAccount = async (
 
   return {
     success: true,
-    user: { id: newAccount.id, name: newAccount.name, email: newAccount.email, streakDays: 1 },
+    user: { id: newAccount.id, name: newAccount.name, email: newAccount.email, streakDays: 0 },
   };
 };
 
@@ -108,7 +108,7 @@ export const loginAccount = async (
     if (localAccount.passwordHash === hashString(cleanPassword)) {
       return {
         success: true,
-        user: { id: localAccount.id, name: localAccount.name, email: localAccount.email, streakDays: 7 },
+        user: { id: localAccount.id, name: localAccount.name, email: localAccount.email, streakDays: 0 },
       };
     } else {
       return {

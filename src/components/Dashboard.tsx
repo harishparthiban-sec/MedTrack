@@ -27,6 +27,7 @@ import type {
   HealthComparisonReport,
   MedicalReport,
 } from '../types';
+import { calculateAdherenceStreak } from '../services/adherence';
 
 interface DashboardProps {
   user: UserProfile | null;
@@ -67,6 +68,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const totalToday = activeSchedules.length;
   const adherencePercentage =
     totalToday > 0 ? Math.min(100, Math.round((takenTodayCount / totalToday) * 100)) : 100;
+
+  // Real-time Consecutive Daily Adherence Streak
+  const currentStreak = calculateAdherenceStreak(adherenceLogs);
 
   // Next Dose Logic
   const loggedScheduleIds = new Set(todayLogs.map((l) => l.scheduleId));
@@ -225,11 +229,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="space-y-1">
             <span className={`text-xs font-extrabold uppercase tracking-wider block ${labelText}`}>Adherence Streak</span>
             <div className={`text-3xl font-extrabold flex items-center ${titleText}`}>
-              {user?.streakDays ?? 1} <span className="text-amber-500 text-xl ml-1">Days</span>
+              {currentStreak} <span className="text-amber-500 text-xl ml-1">{currentStreak === 1 ? 'Day' : 'Days'}</span>
             </div>
-            <span className="text-[11px] font-extrabold text-amber-500 block">🔥 Perfect Consistency</span>
+            {currentStreak > 0 ? (
+              <span className="text-[11px] font-extrabold text-amber-500 block">
+                🔥 {currentStreak > 1 ? `${currentStreak} Days Consistent` : 'Streak Started Today'}
+              </span>
+            ) : (
+              <span className="text-[11px] font-extrabold text-slate-400 dark:text-emerald-200/60 block">
+                Log today&apos;s dose to start a streak
+              </span>
+            )}
           </div>
-          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500">
+          <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center ${
+            currentStreak > 0
+              ? 'bg-amber-500/15 border-amber-500/30 text-amber-500'
+              : 'bg-slate-100 dark:bg-emerald-950/40 border-slate-200 dark:border-emerald-900/30 text-slate-400'
+          }`}>
             <Flame className="w-7 h-7" />
           </div>
         </div>

@@ -26,6 +26,7 @@ import {
 } from './services/storage';
 
 import { requestNotificationPermission, sendDesktopNotification } from './services/notifications';
+import { calculateAdherenceStreak } from './services/adherence';
 
 import type {
   UserProfile,
@@ -67,6 +68,7 @@ export function App() {
   const [activeReminder, setActiveReminder] = useState<MedicineScheduleItem | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
+  const currentStreak = calculateAdherenceStreak(adherenceLogs);
 
   useEffect(() => {
     document.documentElement.className = theme;
@@ -346,6 +348,7 @@ export function App() {
         user={user}
         prescriptionsCount={prescriptions.length}
         reportsCount={reports.length}
+        streakDays={currentStreak}
         isOpen={isAccountModalOpen}
         onClose={() => setIsAccountModalOpen(false)}
         onLogout={handleLogout}
