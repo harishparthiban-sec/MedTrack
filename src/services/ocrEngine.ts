@@ -567,63 +567,152 @@ const isValueAbnormal = (
   return false;
 };
 
-
 /**
  * Comprehensive check for non-data header/footer/facility lines.
  * Prevents hospital names, addresses, doctor names, invoice numbers,
- * sample IDs, and column titles from ever being parsed as biomarkers.
+ * sample IDs, column titles, disclaimers, and footers from ever being
+ * parsed as biomarkers.
  */
 const isMetadataLine = (raw: string): boolean => {
-  const l = raw.trim().toLowerCase();
-  if (l.length < 3) return true;
-  if (/^[\s\-=*_|~#+:]+$/.test(l)) return true;
+  const trimmed = raw.trim();
+  const l = trimmed.toLowerCase();
 
-  // Table header column labels
-  if (/^(test\s*name|investigation|parameter|analyte|test\s*description|examination|profile|panel)\b/i.test(l)) return true;
-  if (/\b(biological\s*ref|reference\s*(range|interval)|normal\s*range)\b/i.test(l) && /\b(result|value|units?|status)\b/i.test(l)) return true;
+  // Empty / too short / decoration
+  if (trimmed.length < 3) return true;
+  if (/^[\s\-=*_|~#+:.]+$/.test(trimmed)) return true;
 
-  // Hospital, Clinics, Laboratories, Medical Centers
-  if (/\b(hospital|hospitals|clinic|clinics|diagnostics?|pathology|laborator(y|ies)|healthcare|health\s*centre|nursing\s*home|medical\s*centre|dispensary)\b/i.test(l)) {
-    // Only allow if it's an explicit clinical test name like "Urine Examination" or "Fasting Glucose"
-    if (!/\b(hemoglobin|blood\s*sugar|glucose|cholesterol|creatinine|platelet|wbc|rbc|tsh|bilirubin|sgpt|sgot|urea|urine|albumin|electrolytes?)\b/i.test(l)) {
+  // Entire line is just a number or just punctuation
+  if (/^[\d\s.,;:]+$/.test(trimmed)) return true;
+
+  // ── Table header column labels ─────────────────────────────────────────────
+  if (/^(test[\s_]*name|investigation|parameter|analyte|test[\s_]*description|examination|profile|panel|report|sl[\s.]*no|sno|sr[\s.]*no)\b/i.test(l)) return true;
+  if (/\b(result|value|units?)\b.*\b(reference|normal|biological|bio[\s-]*ref)\b/i.test(l)) return true;
+  if (/\b(reference|normal|biological|bio[\s-]*ref)\b.*\b(range|interval|value)\b/i.test(l)) return true;
+  // Pure "Units" / "Method" / "Remarks" column header lines
+  if (/^(units?|method|flag|status|remarks?|normal|reference)\s*$/i.test(l)) return true;
+
+  // ── Facility / org identifiers ─────────────────────────────────────────────
+  if (/\b(hospital|hospitals|clinic|clinics|diagnostics?|patholog(y|ist)|laborator(y|ies|ist)|lab\b|healthcare|health\s*care|health\s*centre|nursing\s*home|medical\s*(centre|center|college)|dispensary|centre|polyclinic|super\s*speciality)\b/i.test(l)) {
+    // Exception: test names that happen to have those words (very rare)
+    if (!/\b(urine\s*analysis|urine\s*examination|fasting|post\s*prandial)\b/i.test(l)) {
       return true;
     }
   }
 
-  // Doctor, Physician, Patient, Staff, Client info
-  if (/^(patient|dr\.|doctor|physician|consultant|referred\s*by|ref\s*by|mr\.|mrs\.|ms\.|master|prof\.)\b/i.test(l)) return true;
-  if (/\b(patient\s*name|patient\s*id|uhid|ipd|opd|reg\.?\s*no|age\s*\/\s*gender|years?\s*\/\s*(male|female)|sex\s*:\s*(male|female)|gender\s*:)\b/i.test(l)) return true;
+  // ── Doctor / Patient / Staff info ──────────────────────────────────────────
+  if (/^(dr\.|doctor|physician|consultant|referred?\s*by|ref\s*by|mr\.|mrs\.|ms\.|master|prof\.|technician|ml\s+no|barcode)\b/i.test(l)) return true;
+  if (/\b(patient[\s_]*(name|id|age|gender|sex|dob)|uhid|ipd|opd|reg\.?\s*no|pid\s*:|visit\s*id|client\s*id|lab\s*no\.?|bill\s*no|invoice|sample\s*no)\b/i.test(l)) return true;
+  if (/\b(age\s*[:/]\s*gender|years?\s*[/\-]\s*(male|female)|sex\s*:\s*(male|female|m|f)|gender\s*:)\b/i.test(l)) return true;
 
-  // Sample, collection, report processing metadata
-  if (/\b(sample\s*(id|type|collected|received|date)|specimen|collected\s*(at|on)|received\s*on|reported\s*on|report\s*date|printed\s*on)\b/i.test(l)) return true;
-  if (/\b(end\s*of\s*report|page\s*\d+\s*(of|\/)\s*\d+|signature|technologist|verified\s*by|approved\s*by|pathologist|biochemist)\b/i.test(l)) return true;
+  // ── Sample / Collection / Report processing ────────────────────────────────
+  if (/\b(sample[\s_]*(id|type|collected|received|date|volume|colour|color)|specimen|collected\s*(at|on|by)|received\s*(on|by)|reported\s*(on|by)|report\s*date|printed\s*on|reporting\s*date|collection\s*date|registration\s*date)\b/i.test(l)) return true;
+  if (/\b(end\s*of\s*report|page\s*\d+\s*(of|\/)\s*\d+|signature|verified\s*by|approved\s*by|biochemist|haematologist|authorized\s*by)\b/i.test(l)) return true;
 
-  // Contact / Address info / GST
-  if (/\b(phone|tel[:.]|mobile|email|website|fax[:.]|gstin|pin\s*code|road|street|nagar|floor|block)\b/i.test(l)) return true;
-  if (/\b(methodology|method\s*:|note\s*:|clinical\s*correlation|disclaimer|accredited|nabl|iso\s*\d+)\b/i.test(l)) return true;
+  // ── Contact / Address info ─────────────────────────────────────────────────
+  if (/\b(phone|tel[:.]\s*\+?[\d\s-]+|mobile|email|website|www\.|fax[:.]|gstin|gst\s*no|cin\s*:|pin\s*code|road|street|nagar|floor|block|building|plot|sector)\b/i.test(l)) return true;
+  // Lines with phone-number patterns
+  if (/\b(\+91|0\d{2,4})[\s\-]?\d{6,10}\b/.test(l)) return true;
+
+  // ── Methodology / notes / disclaimers ─────────────────────────────────────
+  if (/\b(methodology|method\s*:|note\s*:|clinical\s*correlation|disclaimer|accredited|nabl|iso\s*\d+|cap\s*accredit|qc\s*report|internal\s*qc)\b/i.test(l)) return true;
+  if (/\b(interpretation|comment|advice|recommendation|please\s*note|kindly\s*note|for\s*more\s*information|consult\s*your\s*(doctor|physician))\b/i.test(l)) return true;
+
+  // ── Plain text sentences / instructions (no numeric values) ───────────────
+  // If the line has no digits at all, it can't be a test result
+  if (!/\d/.test(l)) {
+    // But allow lines like "Haemoglobin" alone (they'll fail downstream for missing value)
+    // Only reject if they look like prose sentences
+    if (l.split(/\s+/).length > 6) return true;
+  }
+
+  // ── Barcode / ID-only lines ────────────────────────────────────────────────
+  if (/^[A-Z]{2,4}\d{6,}$/.test(trimmed)) return true;
+  if (/^\d{6,}$/.test(trimmed)) return true;
 
   return false;
 };
 
 /**
- * Extract reference range pattern from a line.
- * Matches: "12.0 - 15.0", "< 200", "> 40", "<= 100", "upto 150", "(12.0 - 15.0)", "12.0 to 15.0"
+ * Extract ALL reference range patterns from a line, returning the cleaned
+ * line and a normalised ref-range string.
+ *
+ * Handles:
+ *   "12.0 - 15.0"   "< 200"   "> 40"   "<= 100"
+ *   "upto 150"       "Upto 40.0"       "12.0 to 15.0"
+ *   "( 4.5 - 11.0 )" "(70-100)"
+ *   Multiple ranges on one line: removes them all
  */
 const extractRefRangeFromLine = (
   line: string
 ): { refRange: string; cleanLine: string } => {
-  // Matches compound range or inequality expressions
-  const rangeRe = /(?:\(?\s*(?:ref(?:erence)?\s*(?:range|interval)?:?)?\s*)?([<>]?=?\s*\d+(?:\.\d+)?\s*(?:-|–|—|to)\s*\d+(?:\.\d+)?|[<>]=?\s*\d+(?:\.\d+)?|\bupto\s*\d+(?:\.\d+)?|\bless\s*than\s*\d+(?:\.\d+)?)\)?/i;
-  const match = line.match(rangeRe);
+  // Capture the reference range in a named group so we can remove it cleanly.
+  // Order matters — compound ranges before simple inequalities.
+  const rangePatterns: RegExp[] = [
+    // Bracketed compound: (12.0 - 15.0) or ( 4.5-11 )
+    /\(\s*[\d.]+\s*[-–—]\s*[\d.]+\s*\)/g,
+    // Compound with word "to": 12.0 to 15.0
+    /\b[\d.]+\s+to\s+[\d.]+\b/gi,
+    // Plain compound: 12.0 - 15.0  or  12.0–15.0
+    /\b[\d.]+\s*[-–—]\s*[\d.]+\b/g,
+    // Inequality: < 200  <= 100  > 40  >= 30  upto 150
+    /(?:<=?|>=?)\s*[\d.]+/g,
+    /\bupto\s+[\d.]+/gi,
+    /\bless\s+than\s+[\d.]+/gi,
+    /\bgreater\s+than\s+[\d.]+/gi,
+  ];
 
-  if (match && match.index !== undefined) {
-    const refRange = match[1].replace(/\s+/g, ' ').trim();
-    // Remove the reference range completely from the line so its numbers don't conflict with patient result
-    const cleanLine = (line.substring(0, match.index) + ' ' + line.substring(match.index + match[0].length)).trim();
-    return { refRange, cleanLine };
+  let cleanLine = line;
+  let refRange = '';
+
+  // Extract the FIRST compound/inequality range as the canonical ref range
+  for (const re of rangePatterns) {
+    const match = cleanLine.match(re);
+    if (match) {
+      if (!refRange) refRange = match[0].replace(/[()]/g, '').trim();
+      // Remove ALL occurrences of this pattern from the line
+      cleanLine = cleanLine.replace(re, ' ');
+      break; // one pattern is enough for the canonical range
+    }
   }
 
-  return { refRange: '', cleanLine: line };
+  // Clean up remaining reference range tokens
+  // Remove any remaining parenthesised number groups that look like ranges
+  cleanLine = cleanLine.replace(/\(\s*[\d.]+\s*\)/g, ' ');
+  cleanLine = cleanLine.replace(/\s{2,}/g, ' ').trim();
+
+  return { refRange: refRange.replace(/\s+/g, ' ').trim(), cleanLine };
+};
+
+// Known non-clinical words that should never appear as a test name
+const BAD_NAME_WORDS = new Set([
+  'hospital', 'hospitals', 'clinic', 'clinics', 'diagnostics', 'diagnostic',
+  'pathology', 'laboratory', 'laboratories', 'lab', 'healthcare', 'centre',
+  'center', 'dr.', 'doctor', 'patient', 'address', 'phone', 'department',
+  'mobile', 'email', 'website', 'fax', 'gstin', 'invoice', 'receipt',
+  'report', 'barcode', 'printed', 'collected', 'specimen', 'sample',
+  'method', 'technique', 'normal', 'reference', 'biological', 'range',
+  'interval', 'flag', 'units', 'result', 'value', 'status', 'remark',
+  'interpretation', 'accredited', 'nabl', 'iso', 'authorized', 'approved',
+  'verified', 'signature', 'technologist', 'biochemist', 'haematologist',
+]);
+
+// A test name must start with a real alphabetic word and not be a sentence
+const looksLikeTestName = (name: string): boolean => {
+  if (name.length < 2 || name.length > 60) return false;
+  // Must start with a letter
+  if (!/^[A-Za-z]/.test(name)) return false;
+  // Must not be all digits/punctuation
+  if (/^[\d\s.,\-+()]+$/.test(name)) return false;
+  // Must have at least one real letter sequence
+  if (!/[A-Za-z]{2,}/.test(name)) return false;
+  // Reject if any word in the name is a known bad word
+  const words = name.toLowerCase().split(/[\s_/]+/);
+  for (const w of words) {
+    if (BAD_NAME_WORDS.has(w)) return false;
+  }
+  // Reject prose sentences: more than 8 words and no digit = likely a note
+  if (words.length > 8 && !/\d/.test(name)) return false;
+  return true;
 };
 
 interface ParsedRow {
@@ -647,33 +736,46 @@ const parseLine = (raw: string): ParsedRow | null => {
   let line = raw.trim();
   if (isMetadataLine(line)) return null;
 
-  // Strip leading list numbers: "1. ", "02) ", "3 - "
-  line = line.replace(/^\s*\d+[\.\)\-]\s+/, '').trim();
+  // Strip leading list/serial numbers: "1. ", "02) ", "3 - "
+  line = line.replace(/^\s*\d{1,3}[\.\)\-]\s+/, '').trim();
   if (line.length < 3) return null;
 
-  // Normalise thousands separators (e.g. 6,500 -> 6500)
-  line = line.replace(/(\d),(\d{3})/g, '$1$2');
+  // Normalise thousands separators (6,500 → 6500)
+  line = line.replace(/(\d),([\d]{3})/g, '$1$2');
+  // Normalise em-dash / en-dash to ASCII hyphen
+  line = line.replace(/[–—]/g, '-');
 
   // 1. Extract and isolate Reference Range from line
   const { refRange, cleanLine } = extractRefRangeFromLine(line);
   let workingLine = cleanLine;
 
   // 2. Extract Clinical Flag (H, L, High, Low, Normal, Abnormal, *)
+  //    Flags must be word-boundary anchored, case-insensitive
   let flag = '';
-  const flagMatch = workingLine.match(/\b(H|L|HIGH|LOW|NORMAL|ABNORMAL|\*)\b/i);
-  if (flagMatch) {
+  const flagMatch = workingLine.match(/\b(H|L|HIGH|LOW|NORMAL|ABNORMAL|A)\b/i);
+  if (flagMatch && flagMatch.index !== undefined) {
     flag = flagMatch[1].toUpperCase();
-    workingLine = workingLine.replace(new RegExp(`\\b${flagMatch[1]}\\b`, 'i'), ' ').trim();
+    workingLine = (
+      workingLine.substring(0, flagMatch.index) +
+      ' ' +
+      workingLine.substring(flagMatch.index + flagMatch[0].length)
+    ).trim();
+  }
+  // Also detect asterisk-only flag
+  const starMatch = workingLine.match(/\s\*\s/);
+  if (starMatch && !flag) {
+    flag = '*';
+    workingLine = workingLine.replace(/\s\*\s/, ' ').trim();
   }
 
-  // 3. Extract Medical Unit
+  // 3. Extract Medical Unit (ordered longest → shortest)
   let unit = '';
   let unitIndex = -1;
   let matchedUnitStr = '';
 
   for (const u of MEDICAL_UNITS) {
     const escaped = u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const unitRe = new RegExp(`(?:^|\\s)(${escaped})(?=[\\s,;:]|$)`, 'i');
+    const unitRe = new RegExp(`(?:^|\\s)(${escaped})(?=[\\s,;:|]|$)`, 'i');
     const uMatch = workingLine.match(unitRe);
     if (uMatch && uMatch.index !== undefined) {
       unit = u;
@@ -691,13 +793,13 @@ const parseLine = (raw: string): ParsedRow | null => {
     const beforeUnit = workingLine.substring(0, unitIndex).trim();
     const afterUnit = workingLine.substring(unitIndex + matchedUnitStr.length).trim();
 
-    // Most common: Result number is immediately before unit ("Hemoglobin 13.5 g/dL")
+    // Most common: result number immediately before unit ("Hemoglobin 13.5 g/dL")
     const numBeforeMatch = beforeUnit.match(/(\d+(?:\.\d+)?)\s*$/);
     if (numBeforeMatch && numBeforeMatch.index !== undefined) {
       value = parseFloat(numBeforeMatch[1]);
       testName = beforeUnit.substring(0, numBeforeMatch.index).trim();
     } else {
-      // Result number is immediately after unit ("g/dL 13.5")
+      // Result number immediately after unit ("g/dL 13.5")
       const numAfterMatch = afterUnit.match(/^(\d+(?:\.\d+)?)/);
       if (numAfterMatch) {
         value = parseFloat(numAfterMatch[1]);
@@ -706,18 +808,17 @@ const parseLine = (raw: string): ParsedRow | null => {
     }
   }
 
-  // Fallback: If no unit matched, or pattern didn't capture value
+  // Fallback: no unit matched — look for "<TestName>: <Number>" or "<TestName> <Number>"
   if (value === null) {
-    // Look for "<Test Name> [: =]? <Number> [optional rest]"
-    const numMatch = workingLine.match(/^([A-Za-z0-9\s()/\-\.+'%]+?)\s*[:=]?\s+(\d+(?:\.\d+)?)(?:\s+(.*))?$/);
+    const numMatch = workingLine.match(
+      /^([A-Za-z][A-Za-z0-9\s()/\-\.+%']{1,55}?)\s*[:\s=]\s*(\d+(?:\.\d+)?)(?:\s+(.*))?$/
+    );
     if (numMatch) {
       const candidateName = numMatch[1].trim();
       const numVal = parseFloat(numMatch[2]);
       const rest = numMatch[3] ? numMatch[3].trim() : '';
 
-      value = numVal;
-      testName = candidateName;
-
+      // Attempt to find a unit in the "rest" part
       if (!unit && rest) {
         for (const u of MEDICAL_UNITS) {
           if (rest.toLowerCase().startsWith(u.toLowerCase())) {
@@ -726,23 +827,21 @@ const parseLine = (raw: string): ParsedRow | null => {
           }
         }
       }
+
+      value = numVal;
+      testName = candidateName;
     }
   }
 
   if (value === null || isNaN(value)) return null;
 
-  // Clean test name
-  testName = testName.replace(/[:=|\-_/]+$/, '').trim();
-  testName = testName.replace(/^[0-9\.\)\-]+\s*/, '').trim();
+  // 5. Clean and validate test name
+  testName = testName.replace(/[:\s|/\-_=]+$/, '').trim();   // strip trailing delimiters
+  testName = testName.replace(/^[0-9.\)\-]+\s*/, '').trim(); // strip leading serials
+  // Collapse multiple spaces
+  testName = testName.replace(/\s{2,}/g, ' ').trim();
 
-  // Validate test name length and content
-  if (testName.length < 2 || testName.length > 55) return null;
-  // Reject pure numbers or punctuation
-  if (/^[\d\s.,\-+()]+$/.test(testName)) return null;
-  // Reject any test name containing hospital / clinic / administrative words
-  if (/\b(hospital|hospitals|clinic|clinics|diagnostics|pathology|laboratory|laboratories|dr\.|doctor|patient|address|phone|department|centre|center)\b/i.test(testName)) {
-    return null;
-  }
+  if (!looksLikeTestName(testName)) return null;
 
   const cleanTestName = testName.charAt(0).toUpperCase() + testName.slice(1);
   const isAbnormal = isValueAbnormal(value, refRange, flag);
