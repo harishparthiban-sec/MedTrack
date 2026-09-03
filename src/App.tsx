@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './components/Dashboard';
 import { UploadCenter } from './components/UploadCenter';
@@ -22,6 +22,7 @@ import {
   getStoredReports,
   saveStoredReports,
   clearUserStorage,
+  resetCurrentUserData,
 } from './services/storage';
 
 import { requestNotificationPermission, sendDesktopNotification } from './services/notifications';
@@ -44,12 +45,23 @@ export function App() {
   );
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
 
-  // Application Persistent States
-  const [prescriptions, setPrescriptions] = useState<Prescription[]>(getStoredPrescriptions());
-  const [schedules, setSchedules] = useState<MedicineScheduleItem[]>(getStoredSchedules());
-  const [adherenceLogs, setAdherenceLogs] = useState<AdherenceLog[]>(getStoredLogs());
-  const [reports, setReports] = useState<MedicalReport[]>(getStoredReports());
+  // Application Persistent States - strictly isolated per user account
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>(() =>
+    user ? getStoredPrescriptions(user.id) : []
+  );
+  const [schedules, setSchedules] = useState<MedicineScheduleItem[]>(() =>
+    user ? getStoredSchedules(user.id) : []
+  );
+  const [adherenceLogs, setAdherenceLogs] = useState<AdherenceLog[]>(() =>
+    user ? getStoredLogs(user.id) : []
+  );
+  const [reports, setReports] = useState<MedicalReport[]>(() =>
+    user ? getStoredReports(user.id) : []
+  );
   const [comparisonReport, setComparisonReport] = useState<HealthComparisonReport | null>(null);
+
+  // Track the active user ID loaded into state to avoid cross-user data bleeding
+  const activeUserIdRef = useRef<string | null>(user?.id || null);
 
   // Reminder Popup State
   const [activeReminder, setActiveReminder] = useState<MedicineScheduleItem | null>(null);
@@ -68,6 +80,25 @@ export function App() {
   useEffect(() => {
     requestNotificationPermission();
   }, []);
+
+  // When user switches or logs in/out, load ONLY that user's isolated data
+  useEffect(() => {
+    const currentId = user?.id || null;
+    activeUserIdRef.current = currentId;
+
+    if (currentId) {
+      setPrescriptions(getStoredPrescriptions(currentId));
+      setSchedules(getStoredSchedules(currentId));
+      setAdherenceLogs(getStoredLogs(currentId));
+      setReports(getStoredReports(currentId));
+    } else {
+      setPrescriptions([]);
+      setSchedules([]);
+      setAdherenceLogs([]);
+      setReports([]);
+      setComparisonReport(null);
+    }
+  }, [user?.id]);
 
   // Background real-time timer checking for scheduled medicine times every 30 seconds
   useEffect(() => {
@@ -113,33 +144,47 @@ export function App() {
     }
   }, [reports]);
 
-  // Persist state updates
+  // Persist state updates strictly scoped to active user
   useEffect(() => {
     saveStoredUser(user);
   }, [user]);
 
   useEffect(() => {
-    saveStoredPrescriptions(prescriptions);
-  }, [prescriptions]);
+    if (user?.id && activeUserIdRef.current === user.id) {
+      saveStoredPrescriptions(user.id, prescriptions);
+    }
+  }, [user?.id, prescriptions]);
 
   useEffect(() => {
-    saveStoredSchedules(schedules);
-  }, [schedules]);
+    if (user?.id && activeUserIdRef.current === user.id) {
+      saveStoredSchedules(user.id, schedules);
+    }
+  }, [user?.id, schedules]);
 
   useEffect(() => {
-    saveStoredLogs(adherenceLogs);
-  }, [adherenceLogs]);
+    if (user?.id && activeUserIdRef.current === user.id) {
+      saveStoredLogs(user.id, adherenceLogs);
+    }
+  }, [user?.id, adherenceLogs]);
 
   useEffect(() => {
-    saveStoredReports(reports);
-  }, [reports]);
+    if (user?.id && activeUserIdRef.current === user.id) {
+      saveStoredReports(user.id, reports);
+    }
+  }, [user?.id, reports]);
 
   // If unauthenticated, show Full Auth Screen Landing Page
   if (!user) {
     return (
       <AuthScreen
         onLoginSuccess={(loggedInUser) => {
+          activeUserIdRef.current = loggedInUser.id;
+          setPrescriptions(getStoredPrescriptions(loggedInUser.id));
+          setSchedules(getStoredSchedules(loggedInUser.id));
+          setAdherenceLogs(getStoredLogs(loggedInUser.id));
+          setReports(getStoredReports(loggedInUser.id));
           setUser(loggedInUser);
+          setActiveTab('dashboard');
         }}
       />
     );
@@ -204,11 +249,20 @@ export function App() {
 
   const handleLogout = () => {
     clearUserStorage();
+    activeUserIdRef.current = null;
     setUser(null);
+    setPrescriptions([]);
+    setSchedules([]);
+    setAdherenceLogs([]);
+    setReports([]);
+    setComparisonReport(null);
+    setActiveTab('dashboard');
   };
 
   const handleResetData = () => {
-    clearUserStorage();
+    if (user?.id) {
+      resetCurrentUserData(user.id);
+    }
     setPrescriptions([]);
     setSchedules([]);
     setAdherenceLogs([]);
@@ -228,7 +282,7 @@ export function App() {
         reportsCount={reports.length}
         theme={theme}
         onToggleTheme={toggleTheme}
-        onOpenAuthModal={() => setUser(null)}
+        onOpenAuthModal={handleLogout}
         onOpenAccountModal={() => setIsAccountModalOpen(true)}
         onLogout={handleLogout}
       />
