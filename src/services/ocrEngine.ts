@@ -68,10 +68,16 @@ export const extractTextFromPdfFile = async (file: File): Promise<string> => {
         lastY = currentY;
       }
 
-      // If page had text
-      if (pageText.trim().length > 10) {
+      // Skip non-clinical cover/marketing/infographic/terms/advisory pages if they lack clinical test headers
+      const pageLower = pageText.toLowerCase();
+      const isNonClinicalPage =
+        /\b(personalized\s*summary\s*(&|\+)\s*vital\s*parameters|10\s*vital\s*health\s*parameters|human\s*body\s*ecosystem|equipment\s*dashboard|machine\s*(&|\+)\s*qc|terms\s*(&|\+)\s*conditions|health\s*advisory)\b/i.test(pageLower) &&
+        !/\b(department\s+of|bio\.?\s*ref|biological\s*reference)\b/i.test(pageLower);
+
+      // If page had text and is not purely a non-clinical page
+      if (!isNonClinicalPage && pageText.trim().length > 10) {
         fullText += pageText + '\n';
-      } else {
+      } else if (pageText.trim().length <= 10) {
         // If page has no text stream (scanned image inside PDF), render to canvas & OCR!
         try {
           const viewport = page.getViewport({ scale: 1.5 });
@@ -612,6 +618,11 @@ const isMetadataLine = (raw: string): boolean => {
 
   // ── Advisory, Lifestyle, Nutrition, Terms & Conditions ────────────────────
   if (/\b(health\s*advisory|suggested\s*nutrition|suggested\s*lifestyle|suggested\s*future\s*tests|terms\s*(&|\+)\s*conditions|body\s*mass\s*index|pulse\s*rate|physical\s*activity|food\s*preference|waist\s*\(?in\s*cm\)?|hip\s*circumference|spo2|sugar\s*levels|no\s*data)\b/i.test(l)) return true;
+  if (/\b(every\s+\d+\s+(?:month|months|week|weeks|year|years|days?))\b/i.test(l)) return true;
+
+  // ── Explanatory clinical paragraphs / narrative sentences ────────────────
+  if (/\b(associated\s*with|levels\s*approximately|peak\s*performance|needed\s*to\s*prevent|in\s*turn|intestinal\s*calcium|homeostasis\s*of|metabolites?\s*of|half\s*life|best\s*determined|coenzyme\s*that|vital\s*to|cell\s*growth|deficiency\s*of|misleading\s*results|cellular\s*level|tissue\s*deficiency|symptoms?\s*suggest|concomitant|reference\s*ranges?\s*discussed|combined\s*total\s*is|patient\s*has\s*sufficient)\b/i.test(l)) return true;
+  if (/^approximately\b/i.test(l)) return true;
 
   // ── Table header column labels ─────────────────────────────────────────────
   if (/^(test[\s_]*name|investigation|parameter|analyte|test[\s_]*description|examination|profile|panel|report|sl[\s.]*no|sno|sr[\s.]*no)\b/i.test(l)) return true;
@@ -712,6 +723,13 @@ const BAD_NAME_WORDS = new Set([
   'interpretation', 'accredited', 'nabl', 'iso', 'authorized', 'approved',
   'verified', 'signature', 'technologist', 'biochemist', 'haematologist',
   'booking', 'performed', 'equipment', 'dashboard', 'score', 'concern',
+  'approximately', 'approx', 'levels', 'level', 'associated', 'performance',
+  'absorption', 'prevent', 'suppress', 'rickets', 'osteomalacia', 'intake',
+  'supplementation', 'recommendation', 'requirement', 'target', 'optimal',
+  'peak', 'dose', 'daily', 'hourly', 'weekly', 'monthly', 'year', 'month',
+  'day', 'every', 'minimum', 'maximum', 'estimated', 'around', 'about',
+  'deficiency', 'sufficiency', 'insufficiency', 'pediatric', 'adult',
+  'suggested', 'future', 'lifestyle', 'nutrition', 'function',
 ]);
 
 const looksLikeTestName = (name: string): boolean => {
@@ -724,7 +742,10 @@ const looksLikeTestName = (name: string): boolean => {
   for (const w of words) {
     if (BAD_NAME_WORDS.has(w)) return false;
   }
-  if (/\b(booking|no\.?\s*of\s*tests?|performed|score|equipment|dashboard|machine|serial|receipt)\b/i.test(name)) {
+  if (/\b(booking|no\.?\s*of\s*tests?|performed|score|equipment|dashboard|machine|serial|receipt|approximately|performance|associated|every|month|year|week)\b/i.test(name)) {
+    return false;
+  }
+  if (/^(thyroid|liver|kidney|renal)\s+function(\s+test)?$/i.test(name)) {
     return false;
   }
   if (words.length > 8 && !/\d/.test(name)) return false;
@@ -823,27 +844,25 @@ const parseLine = (raw: string): ParsedRow | null => {
     }
   }
 
-  // Fallback: no unit matched — look for "<TestName>: <Number>" or "<TestName> <Number>"
+  // Fallback: no unit matched — must have colon or equals or refRange to prevent matching arbitrary text with numbers
   if (value === null) {
     const numMatch = workingLine.match(
-      /^([A-Za-z][A-Za-z0-9\s()/\-\.+%']{1,55}?)\s*[:\s=]\s*(\d+(?:\.\d+)?)(?:\s+(.*))?$/
+      /^([A-Za-z][A-Za-z0-9\s()/\-\.+%']{1,55}?)\s*[:=]\s*(\d+(?:\.\d+)?)(?:\s+(.*))?$/
     );
     if (numMatch) {
       const candidateName = numMatch[1].trim();
       const numVal = parseFloat(numMatch[2]);
-      const rest = numMatch[3] ? numMatch[3].trim() : '';
-
-      if (!unit && rest) {
-        for (const u of MEDICAL_UNITS) {
-          if (rest.toLowerCase().startsWith(u.toLowerCase())) {
-            unit = u;
-            break;
-          }
-        }
-      }
-
       value = numVal;
       testName = candidateName;
+    } else if (refRange) {
+      // If we have an explicit reference range, look for "<TestName> <Number>"
+      const rangeNumMatch = workingLine.match(
+        /^([A-Za-z][A-Za-z0-9\s()/\-\.+%']{1,55}?)\s+(\d+(?:\.\d+)?)$/
+      );
+      if (rangeNumMatch) {
+        testName = rangeNumMatch[1].trim();
+        value = parseFloat(rangeNumMatch[2]);
+      }
     }
   }
 
@@ -941,6 +960,11 @@ export const parseLabReportClient = async (
   const testResultsMap = new Map<string, ExtractedTestResult>();
 
   for (const line of lines) {
+    const trimmed = line.trim();
+    if (/\*{2,}\s*end\s+of\s+(?:lab\s+)?report\s*\*{2,}|\bend\s+of\s+report\b/i.test(trimmed)) {
+      break;
+    }
+
     const row = parseLine(line);
     if (!row) continue;
 
