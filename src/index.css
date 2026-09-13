@@ -185,6 +185,19 @@ html.light textarea {
   border: 1.5px solid #cbd5e1 !important;
 }
 
+/* Override inline styles on selects in light mode for dropdowns in comparison page */
+html.light select[style] {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+  border: 1.5px solid #cbd5e1 !important;
+}
+
+html.light select[style] option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+
 /* =========================================================
    3. HYPER-VISIBLE BUTTONS
    ========================================================= */
