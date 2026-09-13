@@ -10,6 +10,8 @@ import {
   ArrowRight,
   ArrowLeftRight,
   Upload,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -76,9 +78,17 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
   const prevReport = reports.find((r) => r.id === selectedPrevId) || sortedReports[0];
   const currReport = reports.find((r) => r.id === selectedCurrId) || sortedReports[sortedReports.length - 1];
 
+  const [showDebug, setShowDebug] = useState(false);
+
   const comparison: HealthComparisonReport | null = useMemo(() => {
     if (prevReport && currReport && prevReport.id !== currReport.id) {
-      return computeHealthComparison(prevReport, currReport);
+      const result = computeHealthComparison(prevReport, currReport);
+      // Debug: log what the comparison found
+      console.log('[MedTrack Comparison Debug]');
+      console.log('Prev report tests:', prevReport.testResults.map(t => `${t.testName}: ${t.value} ${t.unit}`));
+      console.log('Curr report tests:', currReport.testResults.map(t => `${t.testName}: ${t.value} ${t.unit}`));
+      console.log('Matched items:', result.items.map(i => `${i.testName}: ${i.previousValue} → ${i.currentValue} [${i.status}]`));
+      return result;
     }
     if (reports.length >= 2) return initialComparison;
     return null;
@@ -285,6 +295,61 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Detected Tests Panel — show what's actually in each report */}
+      {prevReport && currReport && selectedPrevId !== selectedCurrId && (
+        <div className="card-subtle rounded-2xl border border-emerald-900/30 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowDebug((v) => !v)}
+            className="w-full flex items-center justify-between px-5 py-3.5 text-xs font-extrabold cursor-pointer hover:bg-emerald-500/5 transition-all"
+          >
+            <span className="flex items-center space-x-2">
+              <FileText className="w-4 h-4 text-emerald-500" />
+              <span>
+                View Detected Tests — Baseline: {prevReport.testResults.length} tests &nbsp;|&nbsp; Follow-Up: {currReport.testResults.length} tests
+              </span>
+            </span>
+            {showDebug ? <ChevronUp className="w-4 h-4 opacity-50" /> : <ChevronDown className="w-4 h-4 opacity-50" />}
+          </button>
+          {showDebug && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-t border-emerald-900/20">
+              {/* Baseline tests */}
+              <div className="p-4 border-r border-emerald-900/20">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider opacity-60 mb-3">📅 Baseline: {prevReport.reportDate}</p>
+                {prevReport.testResults.length === 0 ? (
+                  <p className="text-xs text-rose-400 font-bold">⚠ No tests detected — please re-upload this report</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                    {prevReport.testResults.map((t, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs gap-2">
+                        <span className="font-medium truncate opacity-80">{t.testName}</span>
+                        <span className="font-extrabold text-slate-300 flex-shrink-0">{t.value} <span className="opacity-50 font-normal">{t.unit}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Follow-up tests */}
+              <div className="p-4">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 mb-3">🔬 Follow-Up: {currReport.reportDate}</p>
+                {currReport.testResults.length === 0 ? (
+                  <p className="text-xs text-rose-400 font-bold">⚠ No tests detected — please re-upload this report</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                    {currReport.testResults.map((t, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs gap-2">
+                        <span className="font-medium truncate opacity-80">{t.testName}</span>
+                        <span className="font-extrabold text-emerald-400 flex-shrink-0">{t.value} <span className="opacity-50 font-normal">{t.unit}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Out of chronological order banner */}
       {prevReport && currReport && prevReport.id !== currReport.id && prevReport.reportDate > currReport.reportDate && (

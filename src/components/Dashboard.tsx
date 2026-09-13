@@ -28,7 +28,7 @@ import type {
   MedicalReport,
 } from '../types';
 import { calculateAdherenceStreak } from '../services/adherence';
-import { computeHealthComparison } from '../services/aiHealthComparison';
+import { computeHealthComparison, findMatch } from '../services/aiHealthComparison';
 
 interface DashboardProps {
   user: UserProfile | null;
@@ -524,10 +524,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
               /* 2+ Reports: Show comparative trajectory */
               (() => {
                 const sorted = [...reports].sort((a, b) => (a.reportDate || '').localeCompare(b.reportDate || ''));
-                const prev = sorted[0];
                 const curr = sorted[sorted.length - 1];
+                let prev = sorted[0];
+                for (let i = sorted.length - 2; i >= 0; i--) {
+                  if (sorted[i].testResults.some((t) => findMatch(t.testName, curr.testResults, new Set()))) {
+                    prev = sorted[i];
+                    break;
+                  }
+                }
                 const comp = computeHealthComparison(prev, curr);
-                const displayItems = comp.items.slice(0, 4);
+                const shifted = comp.items.filter((i) => i.status === 'improved' || i.status === 'worsened');
+                const displayItems = (shifted.length > 0 ? shifted : comp.items).slice(0, 4);
 
                 return (
                   <div className="space-y-3.5 text-xs font-bold">

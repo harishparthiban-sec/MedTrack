@@ -327,11 +327,11 @@ export const computeHealthComparison = (
         explanation = `Needs Attention ⚠: Shifted outside reference range from ${valPrev} to ${valCurr} ${curr.unit} (standard: ${curr.referenceRange || prev.referenceRange}).`;
       } else if (!prevInRange && !currInRange) {
         // Both outside range: check if distance to target boundary improved or worsened
-        if (currDist < prevDist && (prevDist - currDist) / (prevDist || 1) >= 0.03) {
+        if (currDist < prevDist && (prevDist - currDist) / (prevDist || 1) >= 0.01) {
           status = 'improved';
           improvedCount++;
           explanation = `Improved! Progressed closer to target range from ${valPrev} to ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% shift towards reference).`;
-        } else if (currDist > prevDist && (currDist - prevDist) / (prevDist || 1) >= 0.03) {
+        } else if (currDist > prevDist && (currDist - prevDist) / (prevDist || 1) >= 0.01) {
           status = 'worsened';
           worsenedCount++;
           explanation = `Needs Attention ⚠: Moved further outside target range from ${valPrev} to ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% deviation).`;
@@ -341,8 +341,8 @@ export const computeHealthComparison = (
           explanation = `Remained stable from ${valPrev} to ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% change).`;
         }
       } else {
-        // Both inside healthy range
-        if (Math.abs(pct) < 15.0) {
+        // Both inside healthy range — flag even 5%+ directional change
+        if (Math.abs(pct) < 5.0) {
           status = 'stable';
           stableCount++;
           explanation = `Healthy & Stable: Value maintained at ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% change — comfortably within optimal reference range).`;
@@ -353,15 +353,15 @@ export const computeHealthComparison = (
             improvedCount++;
             explanation = `Improved! Optimized from ${valPrev} to ${valCurr} ${curr.unit} within healthy range.`;
           } else {
-            status = 'stable';
-            stableCount++;
-            explanation = `Healthy Range: Maintained within target at ${valCurr} ${curr.unit} (${curr.referenceRange || prev.referenceRange}).`;
+            status = 'worsened';
+            worsenedCount++;
+            explanation = `Slightly declined from ${valPrev} to ${valCurr} ${curr.unit} within healthy range (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% change).`;
           }
         }
       }
     } else {
-      // Fallback when no range is provided
-      if (Math.abs(pct) < 3.0) {
+      // Fallback when no range is provided — flag any directional change > 1%
+      if (Math.abs(pct) < 1.0) {
         status = 'stable';
         stableCount++;
         explanation = `Remained stable from ${valPrev} to ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% change — within stable range).`;
