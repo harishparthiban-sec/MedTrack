@@ -1,4 +1,5 @@
 import type { ExtractedMedicine, MedicineScheduleItem, ExtractedTestResult, MedicalReport } from '../types';
+import { getCanonicalBiomarkerKey } from './aiHealthComparison';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -723,20 +724,25 @@ const BAD_NAME_WORDS = new Set([
   'interpretation', 'accredited', 'nabl', 'iso', 'authorized', 'approved',
   'verified', 'signature', 'technologist', 'biochemist', 'haematologist',
   'booking', 'performed', 'equipment', 'dashboard', 'score', 'concern',
-  'approximately', 'approx', 'levels', 'level', 'associated', 'performance',
+  'approximately', 'approx', 'associated', 'performance',
   'absorption', 'prevent', 'suppress', 'rickets', 'osteomalacia', 'intake',
   'supplementation', 'recommendation', 'requirement', 'target', 'optimal',
   'peak', 'dose', 'daily', 'hourly', 'weekly', 'monthly', 'year', 'month',
   'day', 'every', 'minimum', 'maximum', 'estimated', 'around', 'about',
-  'deficiency', 'sufficiency', 'insufficiency', 'pediatric', 'adult',
-  'suggested', 'future', 'lifestyle', 'nutrition', 'function',
+  'pediatric', 'adult', 'suggested', 'future', 'lifestyle',
 ]);
 
 const looksLikeTestName = (name: string): boolean => {
-  if (name.length < 2 || name.length > 60) return false;
+  if (name.length < 2 || name.length > 70) return false;
   if (!/^[A-Za-z]/.test(name)) return false;
   if (/^[\d\s.,\-+()]+$/.test(name)) return false;
   if (!/[A-Za-z]{2,}/.test(name)) return false;
+
+  // If standard dictionary recognizes it (Vitamin B12, Vitamin D, HbA1c, etc.), it's a valid clinical biomarker!
+  if (getCanonicalBiomarkerKey(name)) return true;
+
+  // Block explanatory range narrative lines like "Deficiency: < 20 ng/mL" or "Sufficiency: > 30 ng/mL"
+  if (/^(deficiency|sufficiency|insufficiency|toxicity)\s*[:<>=]/i.test(name)) return false;
 
   const words = name.toLowerCase().split(/[\s_/]+/);
   for (const w of words) {
@@ -871,6 +877,7 @@ const parseLine = (raw: string): ParsedRow | null => {
   // 5. Clean and validate test name
   testName = testName.replace(/[:\s|/\-_=]+$/, '').trim();
   testName = testName.replace(/^[0-9.\)\-]+\s*/, '').trim();
+  testName = testName.replace(/\s+(?:level|levels|concentration|estimation)\s*$/i, '').trim();
   testName = testName.replace(/\s{2,}/g, ' ').trim();
 
   if (!looksLikeTestName(testName)) return null;

@@ -18,14 +18,14 @@ export const getCanonicalBiomarkerKey = (rawName?: string): string | null => {
 
   // Vitamins & Minerals
   if (
-    /\b(b\s*12|cyanocobalamin|cobalamin|methylcobalamin)\b/.test(n) ||
-    (/\b(vit|vitamin)\b/.test(n) && /\bb\s*12\b/.test(n))
+    /b12|\bb\s*12\b|cyanocobalamin|cobalamin|methylcobalamin/.test(n) ||
+    (/\b(vit|vitamin)\b/.test(n) && (/\b(b|b12)\b/.test(n) || /12/.test(n)))
   ) {
     return 'biomarker_vitamin_b12';
   }
   if (
-    /\b(d3|25\s*oh|cholecalciferol|hydroxyvitamin\s*d|hydroxy\s*vit)\b/.test(n) ||
-    (/\b(vit|vitamin)\b/.test(n) && /\b(d|d3)\b/.test(n))
+    /\bd3\b|25\s*oh|cholecalciferol|ergocalciferol|hydroxyvitamin\s*d|hydroxy\s*vit/.test(n) ||
+    (/\b(vit|vitamin)\b/.test(n) && /\b(d|d2|d3)\b/.test(n))
   ) {
     return 'biomarker_vitamin_d';
   }

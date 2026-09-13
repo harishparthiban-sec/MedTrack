@@ -15,13 +15,14 @@ import {
   BarChart3,
   Building,
 } from 'lucide-react';
-import type { Prescription, MedicalReport } from '../types';
+import type { Prescription, MedicalReport, ExtractedTestResult } from '../types';
 
 interface ReportsHistoryProps {
   prescriptions: Prescription[];
   reports: MedicalReport[];
   onDeletePrescription: (id: string) => void;
   onDeleteReport: (id: string) => void;
+  onUpdateReport?: (report: MedicalReport) => void;
   setActiveTab?: (tab: string) => void;
 }
 
@@ -30,6 +31,7 @@ export const ReportsHistory: React.FC<ReportsHistoryProps> = ({
   reports,
   onDeletePrescription,
   onDeleteReport,
+  onUpdateReport,
   setActiveTab,
 }) => {
   const [activeSection, setActiveSection] = useState<'reports' | 'prescriptions'>('reports');
@@ -38,6 +40,58 @@ export const ReportsHistory: React.FC<ReportsHistoryProps> = ({
   const [selectedRxModal, setSelectedRxModal] = useState<Prescription | null>(null);
   const [reportSearchQuery, setReportSearchQuery] = useState('');
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
+
+  // Modal biomarker addition state
+  const [showAddBiomarker, setShowAddBiomarker] = useState(false);
+  const [newBiomarkerName, setNewBiomarkerName] = useState('');
+  const [newBiomarkerValue, setNewBiomarkerValue] = useState('');
+  const [newBiomarkerUnit, setNewBiomarkerUnit] = useState('pg/mL');
+  const [newBiomarkerRange, setNewBiomarkerRange] = useState('');
+
+  const handleAddBiomarker = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedReportModal || !newBiomarkerName.trim() || !newBiomarkerValue.trim()) return;
+
+    const val = parseFloat(newBiomarkerValue);
+    if (isNaN(val)) return;
+
+    const newTest: ExtractedTestResult = {
+      id: 'tr-' + Math.random().toString(36).substring(2, 8),
+      testName: newBiomarkerName.trim(),
+      value: val,
+      unit: newBiomarkerUnit.trim(),
+      referenceRange: newBiomarkerRange.trim(),
+      category: 'General Health',
+      isAbnormal: false,
+    };
+
+    const updatedReport: MedicalReport = {
+      ...selectedReportModal,
+      testResults: [...selectedReportModal.testResults, newTest],
+    };
+
+    setSelectedReportModal(updatedReport);
+    if (onUpdateReport) {
+      onUpdateReport(updatedReport);
+    }
+
+    setNewBiomarkerName('');
+    setNewBiomarkerValue('');
+    setNewBiomarkerRange('');
+    setShowAddBiomarker(false);
+  };
+
+  const handleDeleteBiomarker = (testId: string) => {
+    if (!selectedReportModal) return;
+    const updatedReport: MedicalReport = {
+      ...selectedReportModal,
+      testResults: selectedReportModal.testResults.filter((t) => t.id !== testId),
+    };
+    setSelectedReportModal(updatedReport);
+    if (onUpdateReport) {
+      onUpdateReport(updatedReport);
+    }
+  };
 
   // Overall Statistics
   const totalReports = reports.length;
@@ -320,6 +374,19 @@ export const ReportsHistory: React.FC<ReportsHistoryProps> = ({
                           <span>{isExpanded ? 'Hide Details' : 'View All Details'}</span>
                         </button>
 
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedReportModal(rep);
+                            setShowAddBiomarker(false);
+                          }}
+                          className="px-3.5 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                          title="View and Edit Biomarkers"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span className="hidden sm:inline">Add/Edit Tests</span>
+                        </button>
+
                         {setActiveTab && (
                           <button
                             type="button"
@@ -563,7 +630,7 @@ export const ReportsHistory: React.FC<ReportsHistoryProps> = ({
               </button>
             </div>
 
-            {/* Modal search & category filter */}
+            {/* Modal search & actions */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="relative flex-1 max-w-sm">
                 <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -576,14 +643,106 @@ export const ReportsHistory: React.FC<ReportsHistoryProps> = ({
                 />
               </div>
 
-              <button
-                onClick={() => handleExportCSV(selectedReportModal)}
-                className="px-4 py-2 rounded-xl btn-secondary-visible text-xs font-bold flex items-center gap-1.5 self-start cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export CSV</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddBiomarker(!showAddBiomarker)}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{showAddBiomarker ? 'Cancel' : 'Add Biomarker'}</span>
+                </button>
+
+                <button
+                  onClick={() => handleExportCSV(selectedReportModal)}
+                  className="px-3.5 py-2 rounded-xl btn-secondary-visible text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export CSV</span>
+                </button>
+              </div>
             </div>
+
+            {/* Inline Add Biomarker Form */}
+            {showAddBiomarker && (
+              <form
+                onSubmit={handleAddBiomarker}
+                className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-3"
+              >
+                <div className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">
+                  Add New Biomarker / Test Result to this Report
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div className="sm:col-span-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 opacity-70">
+                      Test Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Vitamin B12, Vitamin D"
+                      value={newBiomarkerName}
+                      onChange={(e) => setNewBiomarkerName(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-[#04241b] border border-emerald-500/30 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 opacity-70">
+                      Result Value
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 350"
+                      value={newBiomarkerValue}
+                      onChange={(e) => setNewBiomarkerValue(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-[#04241b] border border-emerald-500/30 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 opacity-70">
+                      Unit
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. pg/mL, ng/mL"
+                      value={newBiomarkerUnit}
+                      onChange={(e) => setNewBiomarkerUnit(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-[#04241b] border border-emerald-500/30 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 opacity-70">
+                      Reference Range
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 211 - 911"
+                      value={newBiomarkerRange}
+                      onChange={(e) => setNewBiomarkerRange(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-[#04241b] border border-emerald-500/30 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddBiomarker(false)}
+                    className="px-4 py-2 rounded-xl btn-secondary-visible text-xs font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 text-xs font-black hover:bg-emerald-400 transition-all cursor-pointer shadow-sm"
+                  >
+                    Save Biomarker
+                  </button>
+                </div>
+              </form>
+            )}
 
             {/* Full Report Table */}
             <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-emerald-900/40">
@@ -595,6 +754,7 @@ export const ReportsHistory: React.FC<ReportsHistoryProps> = ({
                     <th className="px-4 py-3">Reference Range</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Category</th>
+                    <th className="px-3 py-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-emerald-900/20 font-semibold">
@@ -638,16 +798,39 @@ export const ReportsHistory: React.FC<ReportsHistoryProps> = ({
                         <td className="px-4 py-3 text-[11px] text-slate-400">
                           {t.category || 'General Health'}
                         </td>
+                        <td className="px-3 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBiomarker(t.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                            title="Remove biomarker"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                 </tbody>
               </table>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              {setActiveTab && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedReportModal(null);
+                    setActiveTab('comparison');
+                  }}
+                  className="px-4 py-2.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Compare in Analytics →</span>
+                </button>
+              )}
               <button
                 onClick={() => setSelectedReportModal(null)}
-                className="px-6 py-2.5 rounded-2xl btn-secondary-visible text-xs font-extrabold cursor-pointer"
+                className="px-6 py-2.5 rounded-2xl btn-secondary-visible text-xs font-extrabold cursor-pointer ml-auto"
               >
                 Close Viewer
               </button>

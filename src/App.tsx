@@ -252,6 +252,10 @@ export function App() {
     setReports((prev) => prev.filter((r) => r.id !== id));
   };
 
+  const handleUpdateReport = (updatedReport: MedicalReport) => {
+    setReports((prev) => prev.map((r) => (r.id === updatedReport.id ? updatedReport : r)));
+  };
+
   const handleLogout = () => {
     clearUserStorage();
     activeUserIdRef.current = null;
@@ -332,7 +336,11 @@ export function App() {
         )}
 
         {activeTab === 'comparison' && (
-          <HealthReportComparison reports={reports} initialComparison={comparisonReport} />
+          <HealthReportComparison
+            reports={reports}
+            initialComparison={comparisonReport}
+            setActiveTab={setActiveTab}
+          />
         )}
 
         {activeTab === 'reports' && (
@@ -341,6 +349,7 @@ export function App() {
             reports={reports}
             onDeletePrescription={handleDeletePrescription}
             onDeleteReport={handleDeleteReport}
+            onUpdateReport={handleUpdateReport}
             setActiveTab={setActiveTab}
           />
         )}
