@@ -10,7 +10,6 @@ import {
   ArrowRight,
   ArrowLeftRight,
   Upload,
-  Minus,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -85,40 +84,40 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
     return null;
   }, [prevReport, currReport, initialComparison, reports.length]);
 
-  // Find another report that shares biomarkers with currReport when currently selected prevReport has 0 matches
-  const suggestedMatchingReport = useMemo(() => {
-    if (!currReport || !prevReport || (comparison && comparison.items.length > 0)) return null;
+  const improvedItems = useMemo(() => {
+    if (!comparison) return [];
+    return comparison.items.filter((i) => i.status === 'improved');
+  }, [comparison]);
 
-    for (const r of sortedReports) {
-      if (r.id === currReport.id || r.id === prevReport.id) continue;
-      const matched = r.testResults.filter((t) =>
-        findMatch(t.testName, currReport.testResults, new Set())
-      );
-      if (matched.length > 0) {
-        return {
-          id: r.id,
-          reportDate: r.reportDate,
-          labName: r.labName,
-          filename: r.filename,
-          matchCount: matched.length,
-          matchedNames: matched.map((m) => m.testName),
-        };
+  const degradedItems = useMemo(() => {
+    if (!comparison) return [];
+    return comparison.items.filter((i) => i.status === 'worsened');
+  }, [comparison]);
+
+  // ONLY biomarkers that are improved or degraded - strictly exclude unnecessary biomarkers!
+  const trendTestItems = useMemo(() => {
+    return [...improvedItems, ...degradedItems];
+  }, [improvedItems, degradedItems]);
+
+  const [selectedTrendTest, setSelectedTrendTest] = useState<string>('');
+
+  // Keep selected trend test aligned with improved/degraded list
+  useEffect(() => {
+    if (trendTestItems.length > 0) {
+      if (!selectedTrendTest || !trendTestItems.some((t) => t.testName === selectedTrendTest)) {
+        setSelectedTrendTest(trendTestItems[0].testName);
       }
+    } else {
+      setSelectedTrendTest('');
     }
-    return null;
-  }, [currReport, prevReport, comparison, sortedReports]);
+  }, [trendTestItems, selectedTrendTest]);
 
-  // Dynamic test name list from all reports
-  const allTestNames = useMemo(() => {
-    const namesSet = new Set<string>();
-    reports.forEach((r) => r.testResults.forEach((t) => namesSet.add(t.testName)));
-    return Array.from(namesSet).sort();
-  }, [reports]);
+  const currentTrendItem = trendTestItems.find((t) => t.testName === selectedTrendTest);
+  const isCurrentTrendImproved = currentTrendItem?.status === 'improved';
 
-  const [selectedTrendTest, setSelectedTrendTest] = useState<string>(allTestNames[0] || '');
-
-  // Trend data sorted chronologically
+  // Trend data for the selected improved/degraded parameter
   const trendData = useMemo(() => {
+    if (!selectedTrendTest) return [];
     return [...reports]
       .sort((a, b) => (a.reportDate < b.reportDate ? -1 : 1))
       .map((r) => {
@@ -170,10 +169,14 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
                 : 'You have 1 report uploaded. Upload one more lab report to enable AI comparison between your baseline and follow-up values.'}
             </p>
           </div>
-          <div className="flex items-center space-x-2 px-6 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-sm font-extrabold">
+          <button
+            type="button"
+            onClick={() => setActiveTab && setActiveTab('upload')}
+            className="flex items-center space-x-2 px-6 py-3 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-sm font-extrabold cursor-pointer transition-all"
+          >
             <Upload className="w-4 h-4" />
             <span>Go to Upload Center → Lab Reports</span>
-          </div>
+          </button>
         </div>
 
         <div className="card-subtle rounded-2xl p-5 flex items-start space-x-3.5 text-xs">
@@ -318,240 +321,216 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
           <p className="text-sm sm:text-base leading-relaxed font-medium">
             {comparison.overallSummary}
           </p>
-          {comparison.items.length > 0 ? (
-            <div className="flex flex-wrap gap-3 pt-1">
-              <span className="px-3 py-1.5 rounded-full text-xs font-extrabold bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center space-x-1.5">
-                <TrendingUp className="w-3.5 h-3.5" />
-                <span>{comparison.items.filter((i) => i.status === 'improved').length} Improved</span>
-              </span>
-              <span className="px-3 py-1.5 rounded-full text-xs font-extrabold bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 flex items-center space-x-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                <span>{comparison.items.filter((i) => i.status === 'worsened').length} Need Attention</span>
-              </span>
-              <span className="px-3 py-1.5 rounded-full text-xs font-extrabold bg-slate-500/15 border border-slate-500/30 text-slate-600 dark:text-slate-300 flex items-center space-x-1.5">
-                <Minus className="w-3.5 h-3.5" />
-                <span>{comparison.items.filter((i) => i.status === 'stable').length} Stable</span>
-              </span>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center space-x-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                <span>0 Overlapping Biomarkers Between Selected Dates</span>
-              </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Baseline has {prevReport?.testResults.length || 0} test(s), Follow-up has {currReport?.testResults.length || 0} test(s).
-              </span>
-            </div>
-          )}
+          <div className="flex flex-wrap gap-3 pt-1">
+            <span className="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center space-x-1.5">
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>{improvedItems.length} Improved</span>
+            </span>
+            <span className="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 flex items-center space-x-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>{degradedItems.length} Degraded</span>
+            </span>
+          </div>
         </div>
       )}
 
-      {/* Diagnostic Panel when 0 matching biomarkers */}
-      {comparison && selectedPrevId !== selectedCurrId && comparison.items.length === 0 && (
-        <div className="card-subtle rounded-3xl p-6 sm:p-8 border border-amber-500/30 space-y-5 shadow-sm">
-          <div className="flex items-start space-x-3">
-            <div className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 flex-shrink-0 mt-0.5">
-              <AlertTriangle className="w-5 h-5" />
+      {/* Improved Biomarkers Section Alone */}
+      {comparison && selectedPrevId !== selectedCurrId && improvedItems.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center space-x-2.5 text-emerald-600 dark:text-emerald-400">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                Biomarker Mismatch Diagnostics
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-emerald-200/70 font-medium mt-0.5">
-                The AI examined all analytes in both reports. The two selected documents test different medical parameters:
-              </p>
-            </div>
+            <h2 className="text-xl font-extrabold">Improved Biomarkers ({improvedItems.length})</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Baseline Report Biomarkers */}
-            <div className="rounded-2xl p-4 bg-slate-500/10 border border-slate-500/20 space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
-                <span>📅 Baseline ({prevReport?.reportDate}):</span>
-                <span className="px-2 py-0.5 rounded-full bg-slate-500/20 text-[11px] font-bold">
-                  {prevReport?.testResults.length || 0} Biomarkers
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {prevReport && prevReport.testResults.length > 0 ? (
-                  prevReport.testResults.map((t, idx) => (
-                    <span key={idx} className="px-2.5 py-1 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 text-[11px] font-bold text-slate-700 dark:text-slate-300 border border-slate-300/40 dark:border-slate-700">
-                      {t.testName} <span className="opacity-70 font-medium">({t.value} {t.unit})</span>
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs italic text-slate-400">No test results in this report</span>
-                )}
-              </div>
-            </div>
-
-            {/* Follow-up Report Biomarkers */}
-            <div className="rounded-2xl p-4 bg-emerald-500/10 border border-emerald-500/20 space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                <span>🔬 Follow-up ({currReport?.reportDate}):</span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-[11px] font-bold">
-                  {currReport?.testResults.length || 0} Biomarkers
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {currReport && currReport.testResults.length > 0 ? (
-                  currReport.testResults.map((t, idx) => (
-                    <span key={idx} className="px-2.5 py-1 rounded-xl bg-emerald-500/15 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                      {t.testName} <span className="opacity-70 font-medium">({t.value} {t.unit})</span>
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs italic text-slate-400">No test results in this report</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Smart suggestion button */}
-          {suggestedMatchingReport && (
-            <div className="rounded-2xl p-4 bg-cyan-500/10 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center space-x-2.5 text-xs text-cyan-800 dark:text-cyan-200">
-                <Sparkles className="w-4 h-4 text-cyan-500 flex-shrink-0" />
-                <span>
-                  <strong>Matching Report Detected:</strong> Your report from <strong>{suggestedMatchingReport.reportDate}</strong> ({suggestedMatchingReport.labName}) has {suggestedMatchingReport.matchCount} matching biomarker{suggestedMatchingReport.matchCount !== 1 ? 's' : ''} ({suggestedMatchingReport.matchedNames.join(', ')})!
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedPrevId(suggestedMatchingReport.id)}
-                className="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 text-xs font-black hover:bg-cyan-400 transition-all flex-shrink-0 shadow-sm cursor-pointer"
-              >
-                Compare with {suggestedMatchingReport.reportDate} Report →
-              </button>
-            </div>
-          )}
-
-          {/* Action to view / add biomarkers in Reports History */}
-          {setActiveTab && (
-            <div className="pt-1 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setActiveTab('reports')}
-                className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <span>View, add, or edit biomarkers in Reports History</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Biomarker Comparison Cards */}
-      {comparison && selectedPrevId !== selectedCurrId && comparison.items.length > 0 && (
-        <div className="space-y-6">
-          <h2 className="text-xl font-extrabold">Biomarker Shifts ({comparison.items.length})</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {comparison.items.map((item, idx) => {
-              const isImproved = item.status === 'improved';
-              const isWorsened = item.status === 'worsened';
-              return (
-                <div
-                  key={idx}
-                  className={`card-subtle rounded-3xl p-6 sm:p-7 border transition-all space-y-4 ${
-                    isImproved
-                      ? 'border-emerald-500/40 bg-emerald-50/50 dark:bg-emerald-950/10'
-                      : isWorsened
-                      ? 'border-rose-500/40 bg-rose-50/50 dark:bg-rose-950/10'
-                      : 'border-slate-200 dark:border-emerald-900/30'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-1 min-w-0 pr-3">
-                      <h3 className="text-base font-extrabold leading-tight">{item.testName}</h3>
-                      <p className="text-xs opacity-60">Reference: {item.referenceRange || 'Standard'}</p>
-                    </div>
-                    <span
-                      className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center space-x-1 ${
-                        isImproved
-                          ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                          : isWorsened
-                          ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                          : 'bg-slate-100 dark:bg-emerald-900/30 border border-slate-200 dark:border-emerald-800/50'
-                      }`}
-                    >
-                      {isImproved && <TrendingUp className="w-3.5 h-3.5 mr-1 text-emerald-500" />}
-                      {isWorsened && <TrendingDown className="w-3.5 h-3.5 mr-1 text-rose-500" />}
-                      {!isImproved && !isWorsened && <Minus className="w-3.5 h-3.5 mr-1" />}
-                      <span>{isImproved ? 'Improved' : isWorsened ? 'Attention' : 'Stable'}</span>
+            {improvedItems.map((item, idx) => (
+              <div
+                key={idx}
+                className="card-subtle rounded-3xl p-6 sm:p-7 border border-emerald-500/40 bg-emerald-50/50 dark:bg-emerald-950/15 transition-all space-y-4 shadow-sm"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1 min-w-0 pr-3">
+                    <h3 className="text-base font-extrabold leading-tight text-slate-900 dark:text-white">
+                      {item.testName}
+                    </h3>
+                    <p className="text-xs opacity-60">Reference: {item.referenceRange || 'Standard'}</p>
+                  </div>
+                  <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center space-x-1 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    <TrendingUp className="w-3.5 h-3.5 mr-1 text-emerald-500" />
+                    <span>Improved</span>
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 p-4 rounded-2xl bg-white/60 dark:bg-[#031f17] border border-emerald-500/20">
+                  <div className="text-center flex-1">
+                    <span className="text-[10px] uppercase tracking-wider font-extrabold block opacity-60 mb-1">Previous</span>
+                    <span className="text-xl font-bold text-slate-700 dark:text-slate-300">
+                      {item.previousValue}
+                      <span className="text-xs font-medium ml-1 opacity-70">{item.unit}</span>
                     </span>
                   </div>
-
-                  <div className="flex items-center justify-between gap-2 p-4 rounded-2xl bg-slate-50 dark:bg-[#031f17] border border-slate-200 dark:border-emerald-900/30">
-                    <div className="text-center flex-1">
-                      <span className="text-[10px] uppercase tracking-wider font-extrabold block opacity-60 mb-1">Previous</span>
-                      <span className="text-xl font-bold">
-                        {item.previousValue}
-                        <span className="text-xs font-medium ml-1 opacity-70">{item.unit}</span>
-                      </span>
-                    </div>
-                    <ArrowRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                    <div className="text-center flex-1">
-                      <span className="text-[10px] uppercase tracking-wider font-extrabold block opacity-60 mb-1">Current</span>
-                      <span className={`text-2xl font-extrabold ${isImproved ? 'text-emerald-500' : isWorsened ? 'text-rose-500' : 'text-cyan-500'}`}>
-                        {item.currentValue}
-                        <span className="text-xs font-medium ml-1 opacity-70">{item.unit}</span>
-                      </span>
-                    </div>
-                    <div className="text-center flex-1">
-                      <span className="text-[10px] uppercase tracking-wider font-extrabold block opacity-60 mb-1">Δ Change</span>
-                      <span className={`text-sm font-extrabold ${isImproved ? 'text-emerald-500' : isWorsened ? 'text-rose-500' : 'text-slate-400'}`}>
-                        {item.changePercentage > 0 ? `+${item.changePercentage}%` : `${item.changePercentage}%`}
-                      </span>
-                    </div>
+                  <ArrowRight className="w-5 h-5 text-emerald-500/60 flex-shrink-0" />
+                  <div className="text-center flex-1">
+                    <span className="text-[10px] uppercase tracking-wider font-extrabold block opacity-60 mb-1 text-emerald-600 dark:text-emerald-400">Current</span>
+                    <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                      {item.currentValue}
+                      <span className="text-xs font-bold ml-1 opacity-80">{item.unit}</span>
+                    </span>
                   </div>
-
-                  <p className="text-xs leading-relaxed flex items-start space-x-2">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                    <span className="opacity-80">{item.explanation}</span>
-                  </p>
+                  <div className="text-center flex-1">
+                    <span className="text-[10px] uppercase tracking-wider font-extrabold block opacity-60 mb-1 text-emerald-600 dark:text-emerald-400">Change</span>
+                    <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                      {item.changePercentage > 0 ? `+${item.changePercentage}%` : `${item.changePercentage}%`}
+                    </span>
+                  </div>
                 </div>
-              );
-            })}
+
+                <p className="text-xs leading-relaxed flex items-start space-x-2 text-slate-700 dark:text-emerald-200/90 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  <span>{item.explanation}</span>
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Longitudinal Trend Chart */}
+      {/* Degraded Biomarkers Section Alone */}
+      {comparison && selectedPrevId !== selectedCurrId && degradedItems.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center space-x-2.5 text-rose-600 dark:text-rose-400">
+            <div className="w-8 h-8 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
+              <TrendingDown className="w-4 h-4" />
+            </div>
+            <h2 className="text-xl font-extrabold">Degraded Biomarkers ({degradedItems.length})</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {degradedItems.map((item, idx) => (
+              <div
+                key={idx}
+                className="card-subtle rounded-3xl p-6 sm:p-7 border border-rose-500/40 bg-rose-50/50 dark:bg-rose-950/15 transition-all space-y-4 shadow-sm"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1 min-w-0 pr-3">
+                    <h3 className="text-base font-extrabold leading-tight text-slate-900 dark:text-white">
+                      {item.testName}
+                    </h3>
+                    <p className="text-xs opacity-60">Reference: {item.referenceRange || 'Standard'}</p>
+                  </div>
+                  <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center space-x-1 bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                    <TrendingDown className="w-3.5 h-3.5 mr-1 text-rose-500" />
+                    <span>Degraded</span>
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 p-4 rounded-2xl bg-white/60 dark:bg-[#031f17] border border-rose-500/20">
+                  <div className="text-center flex-1">
+                    <span className="text-[10px] uppercase tracking-wider font-extrabold block opacity-60 mb-1">Previous</span>
+                    <span className="text-xl font-bold text-slate-700 dark:text-slate-300">
+                      {item.previousValue}
+                      <span className="text-xs font-medium ml-1 opacity-70">{item.unit}</span>
+                    </span>
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-rose-500/60 flex-shrink-0" />
+                  <div className="text-center flex-1">
+                    <span className="text-[10px] uppercase tracking-wider font-extrabold block opacity-60 mb-1 text-rose-600 dark:text-rose-400">Current</span>
+                    <span className="text-2xl font-black text-rose-600 dark:text-rose-400">
+                      {item.currentValue}
+                      <span className="text-xs font-bold ml-1 opacity-80">{item.unit}</span>
+                    </span>
+                  </div>
+                  <div className="text-center flex-1">
+                    <span className="text-[10px] uppercase tracking-wider font-extrabold block opacity-60 mb-1 text-rose-600 dark:text-rose-400">Change</span>
+                    <span className="text-sm font-extrabold text-rose-600 dark:text-rose-400">
+                      {item.changePercentage > 0 ? `+${item.changePercentage}%` : `${item.changePercentage}%`}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs leading-relaxed flex items-start space-x-2 text-slate-700 dark:text-rose-200/90 font-medium">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-500 flex-shrink-0 mt-0.5" />
+                  <span>{item.explanation}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* When no improved or degraded biomarkers */}
+      {comparison && selectedPrevId !== selectedCurrId && improvedItems.length === 0 && degradedItems.length === 0 && (
+        <div className="card-subtle rounded-3xl p-8 text-center space-y-3 border border-slate-200 dark:border-emerald-900/30">
+          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+            {comparison.items.length === 0
+              ? '⚠ No matching biomarkers found between these two reports.'
+              : `✓ ${comparison.items.length} biomarker(s) matched — all values appear stable between these reports.`}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+            {comparison.items.length === 0
+              ? 'The two selected reports may contain different test panels, or the biomarker names may not overlap. Try re-uploading the reports to improve detection accuracy.'
+              : 'No significant improvements or degradations were detected. All compared biomarkers changed within the stable threshold range.'}
+          </p>
+          {comparison.items.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setActiveTab && setActiveTab('upload')}
+              className="mt-2 px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-extrabold transition-all cursor-pointer"
+            >
+              Re-upload Reports →
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Longitudinal Trend Chart — ONLY Improved & Degraded Biomarkers */}
       <div className="card-subtle rounded-3xl p-6 sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border ${
+              isCurrentTrendImproved
+                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                : trendTestItems.length > 0
+                ? 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400'
+                : 'bg-slate-500/15 border-slate-500/30 text-slate-400'
+            }`}>
               <BarChart3 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-extrabold">Longitudinal Biomarker Trend Chart</h3>
-              <p className="text-xs opacity-60">Multi-date parameter trajectory across all uploaded reports</p>
+              <h3 className="text-lg font-extrabold">Biomarker Progression Graph</h3>
+              <p className="text-xs opacity-60">Plotting improved and degraded biomarkers across reports</p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3 flex-shrink-0">
-            <span className="text-xs font-extrabold opacity-70 whitespace-nowrap">Select Parameter:</span>
-            <select
-              value={selectedTrendTest}
-              onChange={(e) => setSelectedTrendTest(e.target.value)}
-              style={{ backgroundColor: '#07281f', color: '#f8fafc', border: '1.5px solid rgba(52,211,153,0.35)' }}
-              className="rounded-xl px-3 py-2 text-xs font-bold outline-none min-w-[180px] cursor-pointer"
-            >
-              {allTestNames.map((name) => (
-                <option key={name} value={name} style={{ backgroundColor: '#07281f', color: '#f8fafc' }}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {trendTestItems.length > 0 && (
+            <div className="flex items-center space-x-3 flex-shrink-0">
+              <span className="text-xs font-extrabold opacity-70 whitespace-nowrap">Select Parameter:</span>
+              <select
+                value={selectedTrendTest}
+                onChange={(e) => setSelectedTrendTest(e.target.value)}
+                style={{ backgroundColor: '#07281f', color: '#f8fafc', border: '1.5px solid rgba(52,211,153,0.35)' }}
+                className="rounded-xl px-3 py-2 text-xs font-bold outline-none min-w-[220px] cursor-pointer"
+              >
+                {trendTestItems.map((item) => (
+                  <option key={item.testName} value={item.testName} style={{ backgroundColor: '#07281f', color: '#f8fafc' }}>
+                    {item.status === 'improved' ? '✓ ' : '⚠ '} {item.testName} ({item.status === 'improved' ? 'Improved' : 'Degraded'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="h-72 w-full pt-2">
-          {trendData.every((d) => d.value === null) ? (
+          {trendTestItems.length === 0 ? (
             <div className="h-full flex items-center justify-center text-sm opacity-50 font-medium">
-              No data found for "{selectedTrendTest}" across uploaded reports.
+              No improved or degraded biomarkers to display in graph.
+            </div>
+          ) : trendData.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-sm opacity-50 font-medium">
+              No data points found for "{selectedTrendTest}".
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
@@ -563,25 +542,28 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
                   contentStyle={{
                     borderRadius: '16px',
                     backgroundColor: '#07281f',
-                    border: '1px solid rgba(52,211,153,0.3)',
+                    border: `1px solid ${isCurrentTrendImproved ? 'rgba(52,211,153,0.4)' : 'rgba(244,63,94,0.4)'}`,
                     color: '#f8fafc',
                     boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
                     fontSize: '12px',
                     fontWeight: 700,
                   }}
-                  labelStyle={{ color: '#a7f3d0', marginBottom: '4px' }}
+                  labelStyle={{ color: isCurrentTrendImproved ? '#a7f3d0' : '#fecdd3', marginBottom: '4px' }}
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  formatter={(value: any) => [`${value ?? ''} ${trendData[0]?.unit || ''}`, selectedTrendTest] as [string, string]}
+                  formatter={(value: any) => [
+                    `${value ?? ''} ${trendData[0]?.unit || ''} (${isCurrentTrendImproved ? 'Improved' : 'Degraded'})`,
+                    selectedTrendTest
+                  ] as [string, string]}
                 />
                 <ReferenceLine y={0} stroke="rgba(52,211,153,0.15)" />
                 <Line
                   type="monotone"
                   dataKey="value"
                   name={selectedTrendTest}
-                  stroke="#059669"
+                  stroke={isCurrentTrendImproved ? '#10b981' : '#f43f5e'}
                   strokeWidth={3}
-                  dot={{ r: 6, fill: '#059669', strokeWidth: 2, stroke: '#10b981' }}
-                  activeDot={{ r: 9, fill: '#10b981', stroke: '#34d399', strokeWidth: 2 }}
+                  dot={{ r: 6, fill: isCurrentTrendImproved ? '#10b981' : '#f43f5e', strokeWidth: 2, stroke: '#ffffff' }}
+                  activeDot={{ r: 9, fill: isCurrentTrendImproved ? '#34d399' : '#fb7185', strokeWidth: 2 }}
                   connectNulls={false}
                 />
               </LineChart>

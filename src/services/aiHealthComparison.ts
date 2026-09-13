@@ -203,9 +203,23 @@ interface ParsedRange {
 
 const parseReferenceRange = (rangeStr?: string): ParsedRange | null => {
   if (!rangeStr) return null;
-  const s = rangeStr.trim();
+  // Strip any trailing unit tokens (e.g. "200 - 900 pg/mL" → "200 - 900")
+  const s = rangeStr
+    .trim()
+    .replace(/\s+(?:pg\/mL|ng\/mL|ng\/dl|ug\/dL|mcg\/dL|mg\/dL|g\/dL|IU\/mL|mIU\/mL|uIU\/mL|mmol\/L|nmol\/L|umol\/L|pmol\/L|U\/L|%|fL|pg)\s*$/i, '')
+    .trim();
 
-  const rangeMatch = s.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
+  // Multi-tier vitamin reference range: e.g. "Deficiency: < 20 Insufficiency: 20-30 Sufficiency: > 30"
+  // Extract the "sufficiency / optimal / normal / desirable" tier as the target range
+  const sufficiencyMatch = s.match(
+    /(?:sufficiency|sufficient|optimal|normal|desirable|adequate)\s*[:\-]?\s*([\d.]+\s*[-–—]\s*[\d.]+|[>≥]\s*[\d.]+|[<≤]\s*[\d.]+)/i
+  );
+  if (sufficiencyMatch) {
+    return parseReferenceRange(sufficiencyMatch[1]);
+  }
+
+  // Standard "N - M" range
+  const rangeMatch = s.match(/^(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)/);
   if (rangeMatch) {
     return { min: parseFloat(rangeMatch[1]), max: parseFloat(rangeMatch[2]) };
   }
@@ -219,6 +233,26 @@ const parseReferenceRange = (rangeStr?: string): ParsedRange | null => {
   if (minMatch) {
     return { min: parseFloat(minMatch[1]) };
   }
+
+  // "upto N" or "less than N" or "greater than N" text patterns
+  const uptoMatch = s.match(/(?:upto|up\s+to|less\s+than|below)\s*(\d+(?:\.\d+)?)/i);
+  if (uptoMatch) return { max: parseFloat(uptoMatch[1]) };
+
+  const aboveMatch = s.match(/(?:greater\s+than|above|more\s+than|at\s+least)\s*(\d+(?:\.\d+)?)/i);
+  if (aboveMatch) return { min: parseFloat(aboveMatch[1]) };
+
+  // Last resort: try to extract first N - M pattern from within the string
+  const embeddedRange = s.match(/(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)/);
+  if (embeddedRange) {
+    return { min: parseFloat(embeddedRange[1]), max: parseFloat(embeddedRange[2]) };
+  }
+
+  // Extract a lone "< N" or "> N" from within the string
+  const embeddedLt = s.match(/[<≤]\s*(\d+(?:\.\d+)?)/);
+  if (embeddedLt) return { max: parseFloat(embeddedLt[1]) };
+
+  const embeddedGt = s.match(/[>≥]\s*(\d+(?:\.\d+)?)/);
+  if (embeddedGt) return { min: parseFloat(embeddedGt[1]) };
 
   return null;
 };

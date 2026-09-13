@@ -665,6 +665,7 @@ const isMetadataLine = (raw: string): boolean => {
  * Extract ALL reference range patterns from a line, returning the cleaned
  * line and a normalised ref-range string.
  * Handles single compound ranges, inequalities, and multi-tier ranges (Acceptable: <170 Borderline: 170-199).
+ * Specially handles Vitamin D multi-tier ranges (Deficiency: <20 Insufficiency: 20-30 Sufficiency: >30).
  */
 const extractRefRangeFromLine = (
   line: string
@@ -672,15 +673,26 @@ const extractRefRangeFromLine = (
   let cleanLine = line;
   let refRange = '';
 
-  // 1. First check if there is an explicit labeled normal / acceptable / optimal / desirable range
-  const labeledMatch = cleanLine.match(
-    /(?:acceptable|desirable|optimal|normal(?:\s*range)?)\s*[:=-]?\s*([<>]?=?\s*[\d.]+\s*(?:[-–—]|to)\s*[\d.]+|[<>]=?\s*[\d.]+|\bupto\s*[\d.]+)/i
+  // 1. First priority: "sufficiency/sufficient/adequate/optimal/target/normal" tier
+  // This is critical for Vitamin D ranges like "Deficiency: <20 Insufficiency: 20-30 Sufficiency: >30"
+  const sufficiencyMatch = cleanLine.match(
+    /(?:sufficiency|sufficient|adequate|target|optimal|normal(?:\s*range)?)[\s:=-]*([<>]?=?\s*[\d.]+\s*(?:[-–—]|to)\s*[\d.]+|[<>]=?\s*[\d.]+|\bupto\s*[\d.]+)/i
   );
-  if (labeledMatch) {
-    refRange = labeledMatch[1].trim();
+  if (sufficiencyMatch) {
+    refRange = sufficiencyMatch[1].trim();
   }
 
-  // 2. Remove all reference range pattern matches so numbers don't collide with result value
+  // 2. Fallback: standard labeled ranges (acceptable / desirable)
+  if (!refRange) {
+    const labeledMatch = cleanLine.match(
+      /(?:acceptable|desirable)\s*[:=-]?\s*([<>]?=?\s*[\d.]+\s*(?:[-–—]|to)\s*[\d.]+|[<>]=?\s*[\d.]+|\bupto\s*[\d.]+)/i
+    );
+    if (labeledMatch) {
+      refRange = labeledMatch[1].trim();
+    }
+  }
+
+  // 3. Remove all reference range pattern matches so numbers don't collide with result value
   const rangePatterns: RegExp[] = [
     /\(\s*[\d.]+\s*[-–—]\s*[\d.]+\s*\)/g,
     /\b[\d.]+\s+to\s+[\d.]+\b/gi,
@@ -701,9 +713,9 @@ const extractRefRangeFromLine = (
     }
   }
 
-  // 3. Strip multi-tier range category words so they don't pollute line or test names
+  // 4. Strip multi-tier range category words so they don't pollute line or test names
   cleanLine = cleanLine.replace(
-    /\b(acceptable|borderline(?:\s*high|\s*low|\s*abnormal)?|high|low|desirable(?:\/low\s*risk)?|moderate(?:\s*risk)?|elevated(?:\/high\s*risk)?|optimal)\s*[:=-]?/gi,
+    /\b(acceptable|borderline(?:\s*high|\s*low|\s*abnormal)?|high|low|desirable(?:\/low\s*risk)?|moderate(?:\s*risk)?|elevated(?:\/high\s*risk)?|optimal|sufficiency|sufficient|deficiency|deficient|insufficiency|insufficient|adequate|toxicity|toxic)[\s:=-]*/gi,
     ' '
   );
   cleanLine = cleanLine.replace(/\(\s*[\d.]+\s*\)/g, ' ');
