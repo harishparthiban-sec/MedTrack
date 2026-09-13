@@ -369,7 +369,8 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
                     fontWeight: 700,
                   }}
                   labelStyle={{ color: '#a7f3d0', marginBottom: '4px' }}
-                  formatter={(value: number) => [`${value} ${trendData[0]?.unit || ''}`, selectedTrendTest]}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={(value: any) => [`${value ?? ''} ${trendData[0]?.unit || ''}`, selectedTrendTest] as [string, string]}
                 />
                 <ReferenceLine y={0} stroke="rgba(52,211,153,0.15)" />
                 <Line
