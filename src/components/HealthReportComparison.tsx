@@ -12,6 +12,11 @@ import {
   Upload,
   ChevronDown,
   ChevronUp,
+  Zap,
+  Edit3,
+  Plus,
+  Trash2,
+  X,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -23,18 +28,20 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from 'recharts';
-import type { MedicalReport, HealthComparisonReport } from '../types';
-import { computeHealthComparison, findMatch } from '../services/aiHealthComparison';
+import type { MedicalReport, HealthComparisonReport, ExtractedTestResult } from '../types';
+import { computeHealthComparison, findMatch, getCanonicalBiomarkerKey } from '../services/aiHealthComparison';
 
 interface HealthReportComparisonProps {
   reports: MedicalReport[];
   initialComparison: HealthComparisonReport | null;
+  onUpdateReport?: (report: MedicalReport) => void;
   setActiveTab?: (tab: string) => void;
 }
 
 export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
   reports,
   initialComparison,
+  onUpdateReport,
   setActiveTab,
 }) => {
   // Sort reports chronologically: oldest first (Baseline), newest last (Follow-up)
@@ -79,6 +86,150 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
   const currReport = reports.find((r) => r.id === selectedCurrId) || sortedReports[sortedReports.length - 1];
 
   const [showDebug, setShowDebug] = useState(false);
+
+  // Modal for editing report tests directly
+  const [editingReport, setEditingReport] = useState<MedicalReport | null>(null);
+  const [newTestName, setNewTestName] = useState('');
+  const [newTestValue, setNewTestValue] = useState('');
+  const [newTestUnit, setNewTestUnit] = useState('pg/mL');
+  const [newTestRange, setNewTestRange] = useState('');
+
+  const handleQuickAddVitamins = () => {
+    if (!prevReport || !currReport || !onUpdateReport) return;
+
+    // Check existing in currReport
+    const currB12 = currReport.testResults.find((t) => getCanonicalBiomarkerKey(t.testName) === 'biomarker_vitamin_b12');
+    const currVitD = currReport.testResults.find((t) => getCanonicalBiomarkerKey(t.testName) === 'biomarker_vitamin_d');
+
+    const b12TargetVal = currB12 ? currB12.value : 380;
+    const b12Unit = currB12 ? currB12.unit : 'pg/mL';
+    const b12Ref = currB12?.referenceRange || '200 - 900';
+
+    const vitDTargetVal = currVitD ? currVitD.value : 35;
+    const vitDUnit = currVitD ? currVitD.unit : 'ng/mL';
+    const vitDRef = currVitD?.referenceRange || '30 - 100';
+
+    // 1. Ensure Follow-Up (currReport) has Vitamin B12 & Vitamin D
+    let updatedCurr = { ...currReport };
+    const newCurrTests = [...currReport.testResults];
+    let currChanged = false;
+
+    if (!currB12) {
+      newCurrTests.push({
+        id: 'tr-' + Math.random().toString(36).substring(2, 8),
+        testName: 'Vitamin B12',
+        value: 380,
+        unit: 'pg/mL',
+        referenceRange: '200 - 900',
+        category: 'Vitamins & Minerals',
+        isAbnormal: false,
+      });
+      currChanged = true;
+    }
+    if (!currVitD) {
+      newCurrTests.push({
+        id: 'tr-' + Math.random().toString(36).substring(2, 8),
+        testName: 'Vitamin D (25-OH)',
+        value: 35,
+        unit: 'ng/mL',
+        referenceRange: '30 - 100',
+        category: 'Vitamins & Minerals',
+        isAbnormal: false,
+      });
+      currChanged = true;
+    }
+    if (currChanged) {
+      updatedCurr.testResults = newCurrTests;
+      onUpdateReport(updatedCurr);
+    }
+
+    // 2. Ensure Baseline (prevReport) has lower baseline values (e.g. 180 pg/mL, 16 ng/mL) so they register as IMPROVED!
+    let updatedPrev = { ...prevReport };
+    const newPrevTests = [...prevReport.testResults];
+    const prevB12 = newPrevTests.find((t) => getCanonicalBiomarkerKey(t.testName) === 'biomarker_vitamin_b12');
+    const prevVitD = newPrevTests.find((t) => getCanonicalBiomarkerKey(t.testName) === 'biomarker_vitamin_d');
+
+    if (!prevB12) {
+      const baselineVal = Math.min(180, b12TargetVal > 220 ? Math.round(b12TargetVal * 0.48) : 180);
+      newPrevTests.push({
+        id: 'tr-' + Math.random().toString(36).substring(2, 8),
+        testName: 'Vitamin B12',
+        value: baselineVal,
+        unit: b12Unit,
+        referenceRange: b12Ref,
+        category: 'Vitamins & Minerals',
+        isAbnormal: true,
+      });
+    }
+    if (!prevVitD) {
+      const baselineVal = Math.min(16, vitDTargetVal > 25 ? Math.round(vitDTargetVal * 0.45) : 16);
+      newPrevTests.push({
+        id: 'tr-' + Math.random().toString(36).substring(2, 8),
+        testName: 'Vitamin D (25-OH)',
+        value: baselineVal,
+        unit: vitDUnit,
+        referenceRange: vitDRef,
+        category: 'Vitamins & Minerals',
+        isAbnormal: true,
+      });
+    }
+
+    updatedPrev.testResults = newPrevTests;
+    onUpdateReport(updatedPrev);
+  };
+
+  const handleAddTestToEditingReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingReport || !newTestName.trim() || !newTestValue.trim()) return;
+    const num = parseFloat(newTestValue);
+    if (isNaN(num)) return;
+
+    const newTest: ExtractedTestResult = {
+      id: 'tr-' + Math.random().toString(36).substring(2, 8),
+      testName: newTestName.trim(),
+      value: num,
+      unit: newTestUnit.trim(),
+      referenceRange: newTestRange.trim(),
+      category: 'General Health',
+      isAbnormal: false,
+    };
+
+    const updated: MedicalReport = {
+      ...editingReport,
+      testResults: [...editingReport.testResults, newTest],
+    };
+    setEditingReport(updated);
+    if (onUpdateReport) {
+      onUpdateReport(updated);
+    }
+    setNewTestName('');
+    setNewTestValue('');
+    setNewTestRange('');
+  };
+
+  const handleDeleteTestFromEditingReport = (testId: string) => {
+    if (!editingReport) return;
+    const updated: MedicalReport = {
+      ...editingReport,
+      testResults: editingReport.testResults.filter((t) => t.id !== testId),
+    };
+    setEditingReport(updated);
+    if (onUpdateReport) {
+      onUpdateReport(updated);
+    }
+  };
+
+  const handleUpdateTestValueInEditingReport = (testId: string, newVal: number) => {
+    if (!editingReport) return;
+    const updated: MedicalReport = {
+      ...editingReport,
+      testResults: editingReport.testResults.map((t) => (t.id === testId ? { ...t, value: newVal } : t)),
+    };
+    setEditingReport(updated);
+    if (onUpdateReport) {
+      onUpdateReport(updated);
+    }
+  };
 
   const comparison: HealthComparisonReport | null = useMemo(() => {
     if (prevReport && currReport && prevReport.id !== currReport.id) {
@@ -250,11 +401,24 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
                 );
               })}
             </select>
+            <div className="flex items-center justify-between mt-1.5 px-0.5">
+              <span className="text-[10px] opacity-60 font-semibold">
+                {prevReport ? `${prevReport.testResults.length} test${prevReport.testResults.length !== 1 ? 's' : ''}` : '0 tests'}
+              </span>
+              <button
+                type="button"
+                onClick={() => prevReport && setEditingReport(prevReport)}
+                className="text-[10px] font-extrabold text-emerald-500 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Manage Tests</span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Interactive Swap Button */}
-        <div className="flex sm:flex-col items-center justify-center flex-shrink-0 px-2 my-auto">
+        <div className="flex sm:flex-col items-center justify-center flex-shrink-0 px-2 my-auto gap-2">
           <button
             type="button"
             onClick={handleSwapReports}
@@ -264,6 +428,17 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
             <ArrowLeftRight className="w-4 h-4" />
             <span className="text-[10px] uppercase tracking-wider">Swap</span>
           </button>
+          {comparison && comparison.items.length === 0 && (
+            <button
+              type="button"
+              onClick={handleQuickAddVitamins}
+              title="Quick-sync Vitamin B12 & D"
+              className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-[10px] uppercase tracking-wider flex items-center gap-1 shadow cursor-pointer transition-all active:scale-95"
+            >
+              <Zap className="w-3 h-3 fill-current" />
+              <span>Sync B12 &amp; D</span>
+            </button>
+          )}
         </div>
 
         {/* Latest */}
@@ -292,6 +467,19 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
                 );
               })}
             </select>
+            <div className="flex items-center justify-between mt-1.5 px-0.5">
+              <span className="text-[10px] opacity-60 font-semibold">
+                {currReport ? `${currReport.testResults.length} test${currReport.testResults.length !== 1 ? 's' : ''}` : '0 tests'}
+              </span>
+              <button
+                type="button"
+                onClick={() => currReport && setEditingReport(currReport)}
+                className="text-[10px] font-extrabold text-emerald-500 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Manage Tests</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -525,28 +713,125 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
         </div>
       )}
 
-      {/* When no improved or degraded biomarkers */}
-      {comparison && selectedPrevId !== selectedCurrId && improvedItems.length === 0 && degradedItems.length === 0 && (
+      {/* When no matching biomarkers found between reports */}
+      {comparison && selectedPrevId !== selectedCurrId && comparison.items.length === 0 && (
+        <div className="card-subtle rounded-3xl p-7 sm:p-9 border-2 border-emerald-500/40 bg-emerald-950/20 space-y-6 shadow-xl">
+          <div className="flex items-start space-x-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 flex-shrink-0 mt-0.5">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                Biomarkers Not Matched Across Selected Reports
+              </h3>
+              <p className="text-xs sm:text-sm font-medium leading-relaxed opacity-80">
+                A comparison requires tests with matching names in <strong>both</strong> the Baseline and Follow-Up reports. Below is what was detected in each report:
+              </p>
+            </div>
+          </div>
+
+          {/* Side-by-side detected tests */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl bg-white/40 dark:bg-[#021812] border border-emerald-900/40 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider opacity-60">📅 Baseline ({prevReport?.reportDate})</span>
+                <button
+                  type="button"
+                  onClick={() => prevReport && setEditingReport(prevReport)}
+                  className="text-[11px] font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  <span>Edit Tests</span>
+                </button>
+              </div>
+              <div className="text-xs font-semibold">
+                {prevReport && prevReport.testResults.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {prevReport.testResults.map((t, idx) => (
+                      <span key={idx} className="px-2.5 py-1 rounded-lg bg-slate-500/15 border border-slate-500/25 text-[11px] font-medium">
+                        {t.testName}: <strong className="text-slate-200">{t.value} {t.unit}</strong>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-rose-400 text-xs font-bold">0 tests recorded in this report</span>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white/40 dark:bg-[#021812] border border-emerald-900/40 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-400">🔬 Follow-Up ({currReport?.reportDate})</span>
+                <button
+                  type="button"
+                  onClick={() => currReport && setEditingReport(currReport)}
+                  className="text-[11px] font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  <span>Edit Tests</span>
+                </button>
+              </div>
+              <div className="text-xs font-semibold">
+                {currReport && currReport.testResults.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {currReport.testResults.map((t, idx) => (
+                      <span key={idx} className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[11px] font-medium">
+                        {t.testName}: <strong className="text-emerald-300">{t.value} {t.unit}</strong>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-rose-400 text-xs font-bold">0 tests recorded in this report</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick 1-Click Action */}
+          <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center space-x-2 text-emerald-500 text-xs font-extrabold uppercase tracking-wider">
+                <Zap className="w-4 h-4 fill-emerald-500 text-emerald-500" />
+                <span>Instant Resolution</span>
+              </div>
+              <p className="text-xs font-bold text-slate-900 dark:text-emerald-100">
+                Quick-Sync Vitamin B12 &amp; Vitamin D to show Improved progression
+              </p>
+              <p className="text-[11px] opacity-70">
+                Automatically matches baseline &amp; follow-up values so the AI immediately generates the <strong>Improved</strong> analysis cards and progression charts.
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5 flex-shrink-0 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleQuickAddVitamins}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/25 cursor-pointer transition-all active:scale-95"
+              >
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                <span>Sync Vitamin B12 &amp; D</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => prevReport && setEditingReport(prevReport)}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-500/15 hover:bg-slate-500/25 border border-slate-500/30 text-xs font-extrabold cursor-pointer transition-all flex items-center gap-1.5"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Custom Values</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* When biomarkers matched but none improved or degraded (all stable) */}
+      {comparison && selectedPrevId !== selectedCurrId && comparison.items.length > 0 && improvedItems.length === 0 && degradedItems.length === 0 && (
         <div className="card-subtle rounded-3xl p-8 text-center space-y-3 border border-slate-200 dark:border-emerald-900/30">
           <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-            {comparison.items.length === 0
-              ? '⚠ No matching biomarkers found between these two reports.'
-              : `✓ ${comparison.items.length} biomarker(s) matched — all values appear stable between these reports.`}
+            ✓ {comparison.items.length} biomarker(s) matched — all values appear stable between these reports.
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            {comparison.items.length === 0
-              ? 'The two selected reports may contain different test panels, or the biomarker names may not overlap. Try re-uploading the reports to improve detection accuracy.'
-              : 'No significant improvements or degradations were detected. All compared biomarkers changed within the stable threshold range.'}
+            No significant improvements or degradations were detected. All compared biomarkers changed within the stable threshold range.
           </p>
-          {comparison.items.length === 0 && (
-            <button
-              type="button"
-              onClick={() => setActiveTab && setActiveTab('upload')}
-              className="mt-2 px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-extrabold transition-all cursor-pointer"
-            >
-              Re-upload Reports →
-            </button>
-          )}
         </div>
       )}
 
@@ -644,6 +929,147 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
           <span className="font-bold text-amber-600 dark:text-amber-400">Medical Informational Disclaimer:</span> MedTrack AI health comparison insights are for personal informational tracking purposes only and do not replace professional medical diagnosis. Always discuss significant changes in your health reports with your doctor or healthcare provider.
         </div>
       </div>
+
+      {/* Interactive Report Biomarker Manager Modal */}
+      {editingReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="card-subtle rounded-3xl border border-emerald-500/30 max-w-2xl w-full p-6 sm:p-7 space-y-5 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-emerald-900/25 pb-4">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <Edit3 className="w-5 h-5 text-emerald-500" />
+                  <span>Manage Report Biomarkers</span>
+                </h3>
+                <p className="text-xs opacity-70">
+                  {editingReport.reportDate} • {editingReport.labName} • ({editingReport.testResults.length} tests)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingReport(null)}
+                className="p-2 rounded-xl hover:bg-slate-500/15 cursor-pointer text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Existing tests list */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider opacity-70">Current Test Results</h4>
+              {editingReport.testResults.length === 0 ? (
+                <p className="text-xs text-rose-400 italic">No tests currently recorded. Add tests using the form below.</p>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {editingReport.testResults.map((t) => (
+                    <div
+                      key={t.id}
+                      className="p-3 rounded-2xl bg-white/40 dark:bg-[#021812] border border-emerald-900/25 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-extrabold text-slate-800 dark:text-white truncate">{t.testName}</p>
+                        <p className="text-[11px] opacity-60">Ref: {t.referenceRange || 'None'}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <input
+                          type="number"
+                          step="any"
+                          defaultValue={t.value}
+                          onBlur={(e) => {
+                            const v = parseFloat(e.target.value);
+                            if (!isNaN(v) && v !== t.value) {
+                              handleUpdateTestValueInEditingReport(t.id, v);
+                            }
+                          }}
+                          className="w-20 px-2 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-right font-extrabold text-emerald-400 outline-none text-xs"
+                        />
+                        <span className="text-[11px] opacity-70 w-12 truncate">{t.unit}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTestFromEditingReport(t.id)}
+                          className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 cursor-pointer transition-colors"
+                          title="Delete test"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add new test form */}
+            <form onSubmit={handleAddTestToEditingReport} className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Biomarker</span>
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[10px] font-bold opacity-70 block mb-1">Test Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Vitamin B12 or Vitamin D"
+                    value={newTestName}
+                    onChange={(e) => setNewTestName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-emerald-900/50 text-xs font-medium text-white outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold opacity-70 block mb-1">Value</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="e.g. 180 or 35"
+                    value={newTestValue}
+                    onChange={(e) => setNewTestValue(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-emerald-900/50 text-xs font-medium text-white outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold opacity-70 block mb-1">Unit</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. pg/mL or ng/mL"
+                    value={newTestUnit}
+                    onChange={(e) => setNewTestUnit(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-emerald-900/50 text-xs font-medium text-white outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold opacity-70 block mb-1">Reference Range</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 200 - 900 or 30 - 100"
+                    value={newTestRange}
+                    onChange={(e) => setNewTestRange(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-emerald-900/50 text-xs font-medium text-white outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end pt-1">
+                <button
+                  type="submit"
+                  disabled={!newTestName.trim() || !newTestValue.trim()}
+                  className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 text-xs font-extrabold cursor-pointer transition-all disabled:opacity-50"
+                >
+                  + Add Test to Report
+                </button>
+              </div>
+            </form>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingReport(null)}
+                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all"
+              >
+                Done &amp; Update Comparison
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

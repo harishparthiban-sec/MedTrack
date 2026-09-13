@@ -339,6 +339,7 @@ export function App() {
           <HealthReportComparison
             reports={reports}
             initialComparison={comparisonReport}
+            onUpdateReport={handleUpdateReport}
             setActiveTab={setActiveTab}
           />
         )}
