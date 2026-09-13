@@ -1,11 +1,101 @@
 import type { MedicalReport, HealthComparisonReport, HealthComparisonItem } from '../types';
 
 /**
- * Normalize a test name for fuzzy matching:
+ * Standard clinical dictionary of biomarker aliases.
+ * Maps lab variations (e.g. "Vit B12", "Cyanocobalamin", "25-OH Vitamin D", "Vit D3")
+ * to unified canonical keys for 100% reliable matching.
+ */
+export const getCanonicalBiomarkerKey = (rawName?: string): string | null => {
+  if (!rawName) return null;
+  const n = rawName.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Diabetes & Glycemic
+  if (/hba1c|\ba1c\b|glycated|glycosylated/.test(n)) return 'biomarker_hba1c';
+  if ((/fasting|fbs/.test(n) && /glucose|sugar|blood/.test(n)) || /^fbs$/.test(n)) return 'biomarker_glucose_fasting';
+  if (/post\s*prandial|ppbs|ppbg/.test(n) || /^ppbs$/.test(n)) return 'biomarker_glucose_pp';
+  if ((/random|rbs/.test(n) && /glucose|sugar|blood/.test(n)) || /^rbs$/.test(n)) return 'biomarker_glucose_random';
+  if (/glucose|blood\s*sugar/.test(n)) return 'biomarker_glucose';
+
+  // Vitamins & Minerals
+  if (
+    /\b(b\s*12|cyanocobalamin|cobalamin|methylcobalamin)\b/.test(n) ||
+    (/\b(vit|vitamin)\b/.test(n) && /\bb\s*12\b/.test(n))
+  ) {
+    return 'biomarker_vitamin_b12';
+  }
+  if (
+    /\b(d3|25\s*oh|cholecalciferol|hydroxyvitamin\s*d|hydroxy\s*vit)\b/.test(n) ||
+    (/\b(vit|vitamin)\b/.test(n) && /\b(d|d3)\b/.test(n))
+  ) {
+    return 'biomarker_vitamin_d';
+  }
+  if (/folate|folic/.test(n)) return 'biomarker_folate';
+  if (/ferritin/.test(n)) return 'biomarker_ferritin';
+  if (/\biron\b/.test(n)) return 'biomarker_iron';
+  if (/calcium/.test(n)) return 'biomarker_calcium';
+
+  // Lipids
+  if (/\bhdl\b/.test(n)) return 'biomarker_hdl';
+  if (/\bvldl\b/.test(n)) return 'biomarker_vldl';
+  if (/\bldl\b/.test(n)) return 'biomarker_ldl';
+  if (/triglyceride|tgl/.test(n)) return 'biomarker_triglycerides';
+  if (
+    /total\s*cholesterol|cholesterol\s*total/.test(n) ||
+    (/cholesterol/.test(n) && !/\b(hdl|ldl|vldl)\b/.test(n))
+  ) {
+    return 'biomarker_cholesterol_total';
+  }
+
+  // Liver Function
+  if (/sgpt|\balt\b|alanine\s*amino/.test(n)) return 'biomarker_alt_sgpt';
+  if (/sgot|\bast\b|aspartate\s*amino/.test(n)) return 'biomarker_ast_sgot';
+  if (/\balp\b|alkaline\s*phosphatase/.test(n)) return 'biomarker_alp';
+  if (/bilirubin\s*direct|direct\s*bilirubin|conjugated\s*bilirubin/.test(n)) return 'biomarker_bilirubin_direct';
+  if (/bilirubin/.test(n)) return 'biomarker_bilirubin_total';
+  if (/\bggt\b|gamma\s*glutamyl/.test(n)) return 'biomarker_ggt';
+
+  // Kidney Function
+  if (/creatinine/.test(n)) return 'biomarker_creatinine';
+  if (/\burea\b|\bbun\b/.test(n)) return 'biomarker_urea';
+  if (/uric/.test(n)) return 'biomarker_uric_acid';
+
+  // CBC & Hematology
+  if (/\b(hemo|haemo)globin\b|\bhgb\b|\bhb\b/.test(n) && !/hba1c|\ba1c\b/.test(n)) return 'biomarker_hemoglobin';
+  if (/\bwbc\b|\btlc\b|leukocyte|white\s*blood/.test(n)) return 'biomarker_wbc';
+  if (/platelet|\bplt\b/.test(n)) return 'biomarker_platelets';
+  if (/neutrophil/.test(n)) return 'biomarker_neutrophils';
+  if (/lymphocyte/.test(n)) return 'biomarker_lymphocytes';
+  if (/eosinophil/.test(n)) return 'biomarker_eosinophils';
+  if (/monocyte/.test(n)) return 'biomarker_monocytes';
+  if (/\bpcv\b|packed\s*cell|hematocrit|\bhct\b/.test(n)) return 'biomarker_pcv';
+  if (/\bmcv\b/.test(n)) return 'biomarker_mcv';
+  if (/\bmch\b/.test(n)) return 'biomarker_mch';
+  if (/\bmchc\b/.test(n)) return 'biomarker_mchc';
+
+  // Thyroid
+  if (/\btsh\b|thyroid\s*stimulating/.test(n)) return 'biomarker_tsh';
+  if (/\bft3\b|free\s*t3/.test(n)) return 'biomarker_ft3';
+  if (/\bft4\b|free\s*t4/.test(n)) return 'biomarker_ft4';
+  if (/\bt3\b|triiodothyronine/.test(n)) return 'biomarker_t3';
+  if (/\bt4\b|thyroxine/.test(n)) return 'biomarker_t4';
+
+  // Inflammatory
+  if (/\besr\b|erythrocyte\s*sedimentation/.test(n)) return 'biomarker_esr';
+  if (/\bcrp\b|c[-_\s]?reactive/.test(n)) return 'biomarker_crp';
+
+  // Electrolytes
+  if (/sodium|\bna\b/.test(n)) return 'biomarker_sodium';
+  if (/potassium|\bk\b/.test(n)) return 'biomarker_potassium';
+  if (/chloride|\bcl\b/.test(n)) return 'biomarker_chloride';
+
+  return null;
+};
+
+/**
+ * Normalize a test name for fallback fuzzy matching:
  * - Lowercase, strip parentheses/brackets and their contents
  * - Remove common filler words and punctuation
  * - Collapse whitespace
- * - Keep only the core biomarker keywords
  */
 export const normalizeTestName = (name: string): string => {
   return name
@@ -13,25 +103,26 @@ export const normalizeTestName = (name: string): string => {
     .replace(/\([^)]*\)/g, '')       // strip (Glycated Hemoglobin), (25-OH), etc.
     .replace(/\[[^\]]*\]/g, '')      // strip [anything]
     .replace(/[^a-z0-9\s]/g, ' ')   // strip punctuation
-    .replace(/\b(serum|plasma|blood|total|free|direct|indirect|random|fasting|post|prandial|whole|venous)\b/g, '') // strip qualifier words
+    .replace(/\b(serum|plasma|blood|total|free|direct|indirect|random|fasting|post|prandial|whole|venous|level|levels|test|panel|profile)\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 };
 
+const STOP_WORDS = new Set(['vitamin', 'vit', 'test', 'level', 'levels', 'panel', 'profile', 'blood', 'serum', 'plasma', 'total', 'count', 'rate']);
+
 /**
- * Check if two normalized test name tokens overlap sufficiently.
- * A match is accepted when either:
- * (a) one normalized name starts with / contains the other, OR
- * (b) they share ≥2 meaningful tokens (words ≥3 chars).
+ * Check if two normalized test name tokens overlap sufficiently,
+ * excluding generic stop words like "vitamin" to prevent false positive cross-matches.
  */
 export const testNamesMatch = (a: string, b: string): boolean => {
   if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
+  if (a.length >= 4 && b.length >= 4 && (a.includes(b) || b.includes(a))) return true;
 
-  const tokensA = new Set(a.split(' ').filter((t) => t.length >= 3));
-  const tokensB = b.split(' ').filter((t) => t.length >= 3);
+  const tokensA = new Set(a.split(' ').filter((t) => t.length >= 3 && !STOP_WORDS.has(t)));
+  const tokensB = b.split(' ').filter((t) => t.length >= 3 && !STOP_WORDS.has(t));
 
-  // Count shared meaningful tokens
+  if (tokensA.size === 0 || tokensB.length === 0) return false;
+
   let shared = 0;
   for (const t of tokensB) {
     if (tokensA.has(t)) shared++;
@@ -42,30 +133,60 @@ export const testNamesMatch = (a: string, b: string): boolean => {
 };
 
 /**
- * Build a lookup map from normalized name → original test result
+ * Find the best-matching entry in the previous report results for a given current test.
+ * 1. Canonical biomarker key match (highest accuracy, handles all known variations)
+ * 2. Exact normalized name match
+ * 3. Substring match (min 4 chars)
+ * 4. Token overlap fallback without stop words
  */
-const buildNormalizedMap = (
-  results: MedicalReport['testResults']
-): Map<string, MedicalReport['testResults'][0]> => {
-  const map = new Map<string, MedicalReport['testResults'][0]>();
-  for (const r of results) {
-    map.set(normalizeTestName(r.testName), r);
-  }
-  return map;
-};
-
-/**
- * Find the best-matching entry in the normalized map for a given normalized key.
- */
-const findMatch = (
-  normalizedKey: string,
-  normalizedMap: Map<string, MedicalReport['testResults'][0]>
+export const findMatch = (
+  currTestName: string,
+  prevReportResults: MedicalReport['testResults'],
+  matchedPrevIds: Set<string>
 ): MedicalReport['testResults'][0] | undefined => {
-  if (normalizedMap.has(normalizedKey)) return normalizedMap.get(normalizedKey);
+  const currCanon = getCanonicalBiomarkerKey(currTestName);
 
-  for (const [mapKey, result] of normalizedMap.entries()) {
-    if (testNamesMatch(normalizedKey, mapKey)) return result;
+  // 1. First priority: Canonical biomarker match
+  if (currCanon) {
+    for (const prev of prevReportResults) {
+      if (matchedPrevIds.has(prev.id)) continue;
+      const prevCanon = getCanonicalBiomarkerKey(prev.testName);
+      if (prevCanon === currCanon) {
+        return prev;
+      }
+    }
   }
+
+  // 2. Exact normalized name match
+  const currNorm = normalizeTestName(currTestName);
+  for (const prev of prevReportResults) {
+    if (matchedPrevIds.has(prev.id)) continue;
+    const prevNorm = normalizeTestName(prev.testName);
+    if (currNorm.length > 0 && currNorm === prevNorm) {
+      return prev;
+    }
+  }
+
+  // 3. Substring / contains match (minimum 4 characters)
+  for (const prev of prevReportResults) {
+    if (matchedPrevIds.has(prev.id)) continue;
+    const prevNorm = normalizeTestName(prev.testName);
+    if (currNorm.length >= 4 && prevNorm.length >= 4) {
+      if (currNorm.includes(prevNorm) || prevNorm.includes(currNorm)) {
+        return prev;
+      }
+    }
+  }
+
+  // 4. Token overlap fallback (excluding generic stop words)
+  for (const prev of prevReportResults) {
+    if (matchedPrevIds.has(prev.id)) continue;
+    const prevNorm = normalizeTestName(prev.testName);
+    if (testNamesMatch(currNorm, prevNorm)) {
+      return prev;
+    }
+  }
+
   return undefined;
 };
 
@@ -130,29 +251,25 @@ export const computeHealthComparison = (
   prevReport: MedicalReport,
   currReport: MedicalReport
 ): HealthComparisonReport => {
-  const prevNormalizedMap = buildNormalizedMap(prevReport.testResults);
   const items: HealthComparisonItem[] = [];
-  const matchedPrevKeys = new Set<string>();
+  const matchedPrevIds = new Set<string>();
 
   let improvedCount = 0;
   let worsenedCount = 0;
   let stableCount = 0;
 
   currReport.testResults.forEach((curr) => {
-    const currNorm = normalizeTestName(curr.testName);
-    const prev = findMatch(currNorm, prevNormalizedMap);
+    const prev = findMatch(curr.testName, prevReport.testResults, matchedPrevIds);
 
     if (!prev) return;
-
-    const prevNorm = normalizeTestName(prev.testName);
-    if (matchedPrevKeys.has(prevNorm)) return;
-    matchedPrevKeys.add(prevNorm);
+    matchedPrevIds.add(prev.id);
 
     const valPrev = prev.value;
     const valCurr = curr.value;
 
     if (!isFinite(valPrev) || !isFinite(valCurr) || isNaN(valPrev) || isNaN(valCurr)) return;
 
+    const currNorm = normalizeTestName(curr.testName);
     const diff = valCurr - valPrev;
     const pct = valPrev !== 0 ? (diff / valPrev) * 100 : 0;
     const range = parseReferenceRange(curr.referenceRange || prev.referenceRange);

@@ -927,32 +927,42 @@ export const parseLabReportClient = async (
     labName = labLineMatch[1].trim().replace(/\s{2,}/g, ' ');
   }
 
+  const formatIsoDate = (raw: string): string => {
+    const parts = raw.split(/[\/\-.]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        let [y, m, d] = parts;
+        if (parseInt(m, 10) > 12 && parseInt(d, 10) <= 12) {
+          const temp = m; m = d; d = temp;
+        }
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      } else {
+        let [a, b, y] = parts;
+        let d = a;
+        let m = b;
+        if (parseInt(a, 10) <= 12 && parseInt(b, 10) > 12) {
+          m = a;
+          d = b;
+        }
+        const fullY = y.length === 2 ? '20' + y : y;
+        return `${fullY}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+    }
+    return raw;
+  };
+
   const dateMatch = text.match(
     /(?:date|report\s*date|collected|printed|collection\s*date)[:\s]+(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{4}[\/\-.]\d{2}[\/\-.]\d{2})/i
   );
   if (!dateMatch) {
     const bareDateMatch = text.match(
-      /\b(\d{4}-\d{2}-\d{2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b/
+      /\b(\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})\b/
     );
     if (bareDateMatch) {
-      const raw = bareDateMatch[1];
-      const parts = raw.split(/[\/\-]/);
-      if (parts[0].length === 4) {
-        reportDate = raw;
-      } else if (parts.length === 3) {
-        const [d, m, y] = parts;
-        reportDate = `${y.length === 2 ? '20' + y : y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-      }
+      reportDate = formatIsoDate(bareDateMatch[1]);
     }
   } else {
-    const raw = dateMatch[1];
-    const parts = raw.split(/[\/\-.]/);
-    if (parts[0].length === 4) {
-      reportDate = parts.join('-');
-    } else if (parts.length === 3) {
-      const [d, m, y] = parts;
-      reportDate = `${y.length === 2 ? '20' + y : y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    }
+    reportDate = formatIsoDate(dateMatch[1]);
   }
 
   // ── 2. Parse each line with smart upgrade ────────────────────────────────

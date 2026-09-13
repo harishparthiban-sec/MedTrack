@@ -23,7 +23,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import type { MedicalReport, HealthComparisonReport } from '../types';
-import { computeHealthComparison } from '../services/aiHealthComparison';
+import { computeHealthComparison, findMatch } from '../services/aiHealthComparison';
 
 interface HealthReportComparisonProps {
   reports: MedicalReport[];
@@ -83,13 +83,15 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
     return [...reports]
       .sort((a, b) => (a.reportDate < b.reportDate ? -1 : 1))
       .map((r) => {
-        const testMatch = r.testResults.find((t) => t.testName === selectedTrendTest);
+        const dummySet = new Set<string>();
+        const testMatch = findMatch(selectedTrendTest, r.testResults, dummySet);
         return {
           date: r.reportDate,
           value: testMatch ? testMatch.value : null,
           unit: testMatch ? testMatch.unit : '',
         };
-      });
+      })
+      .filter((d) => d.value !== null);
   }, [reports, selectedTrendTest]);
 
   // Handle swap reports
