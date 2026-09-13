@@ -139,7 +139,10 @@ export function App() {
   // Re-compute comparison report when reports state changes
   useEffect(() => {
     if (reports.length >= 2) {
-      const comp = computeHealthComparison(reports[1], reports[0]);
+      const sorted = [...reports].sort((a, b) => (a.reportDate || '').localeCompare(b.reportDate || ''));
+      const baseline = sorted[0];
+      const followUp = sorted[sorted.length - 1];
+      const comp = computeHealthComparison(baseline, followUp);
       setComparisonReport(comp);
     } else {
       setComparisonReport(null);

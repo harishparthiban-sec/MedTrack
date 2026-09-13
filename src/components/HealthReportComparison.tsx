@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Sparkles,
   TrendingUp,
@@ -8,6 +8,7 @@ import {
   BarChart3,
   ShieldAlert,
   ArrowRight,
+  ArrowLeftRight,
   Upload,
   Minus,
 } from 'lucide-react';
@@ -34,16 +35,31 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
   reports,
   initialComparison,
 }) => {
-  // reports[0] = newest (most recently uploaded), reports[last] = oldest
-  // Baseline = oldest, Latest = newest
-  const defaultPrevId = reports.length >= 2 ? reports[reports.length - 1].id : reports[0]?.id || '';
-  const defaultCurrId = reports.length >= 1 ? reports[0].id : '';
+  // Sort reports chronologically: oldest first (Baseline), newest last (Follow-up)
+  const sortedReports = useMemo(() => {
+    return [...reports].sort((a, b) => (a.reportDate || '').localeCompare(b.reportDate || ''));
+  }, [reports]);
+
+  const defaultPrevId = sortedReports.length >= 2 ? sortedReports[0].id : reports[0]?.id || '';
+  const defaultCurrId = sortedReports.length >= 1 ? sortedReports[sortedReports.length - 1].id : '';
 
   const [selectedPrevId, setSelectedPrevId] = useState<string>(defaultPrevId);
   const [selectedCurrId, setSelectedCurrId] = useState<string>(defaultCurrId);
 
-  const prevReport = reports.find((r) => r.id === selectedPrevId) || reports[reports.length - 1];
-  const currReport = reports.find((r) => r.id === selectedCurrId) || reports[0];
+  // Keep selections synced when reports are uploaded or deleted
+  useEffect(() => {
+    if (sortedReports.length >= 2) {
+      if (!selectedPrevId || !reports.some((r) => r.id === selectedPrevId)) {
+        setSelectedPrevId(sortedReports[0].id);
+      }
+      if (!selectedCurrId || !reports.some((r) => r.id === selectedCurrId)) {
+        setSelectedCurrId(sortedReports[sortedReports.length - 1].id);
+      }
+    }
+  }, [reports, sortedReports, selectedPrevId, selectedCurrId]);
+
+  const prevReport = reports.find((r) => r.id === selectedPrevId) || sortedReports[0];
+  const currReport = reports.find((r) => r.id === selectedCurrId) || sortedReports[sortedReports.length - 1];
 
   const comparison: HealthComparisonReport | null = useMemo(() => {
     if (prevReport && currReport && prevReport.id !== currReport.id) {
@@ -75,6 +91,12 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
         };
       });
   }, [reports, selectedTrendTest]);
+
+  // Handle swap reports
+  const handleSwapReports = () => {
+    setSelectedPrevId(selectedCurrId);
+    setSelectedCurrId(selectedPrevId);
+  };
 
   // --- Empty State ---
   if (reports.length < 2) {
@@ -163,7 +185,7 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
               style={{ backgroundColor: '#07281f', color: '#f8fafc', border: '1.5px solid rgba(52,211,153,0.35)' }}
               className="rounded-xl px-3 py-2.5 text-xs font-bold outline-none w-full cursor-pointer"
             >
-              {reports.map((r) => (
+              {sortedReports.map((r) => (
                 <option key={r.id} value={r.id} style={{ backgroundColor: '#07281f', color: '#f8fafc' }}>
                   {r.reportDate}  •  {r.labName}  •  {r.filename}
                 </option>
@@ -172,14 +194,17 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
           </div>
         </div>
 
-        <div className="hidden sm:flex flex-col items-center justify-center flex-shrink-0 px-2">
-          <ArrowRight className="w-6 h-6 text-emerald-500" />
-          <span className="text-[9px] font-extrabold uppercase tracking-wider text-emerald-500/70 mt-1">vs</span>
-        </div>
-        <div className="flex sm:hidden items-center justify-center py-1">
-          <div className="h-px flex-1 bg-emerald-500/20" />
-          <span className="px-3 text-xs font-extrabold text-emerald-500/70 uppercase">vs</span>
-          <div className="h-px flex-1 bg-emerald-500/20" />
+        {/* Interactive Swap Button */}
+        <div className="flex sm:flex-col items-center justify-center flex-shrink-0 px-2 my-auto">
+          <button
+            type="button"
+            onClick={handleSwapReports}
+            title="Swap Baseline and Follow-Up reports"
+            className="px-3 py-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-extrabold transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            <ArrowLeftRight className="w-4 h-4" />
+            <span className="text-[10px] uppercase tracking-wider">Swap</span>
+          </button>
         </div>
 
         {/* Latest */}
@@ -197,7 +222,7 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
               style={{ backgroundColor: '#07281f', color: '#f8fafc', border: '1.5px solid rgba(52,211,153,0.55)' }}
               className="rounded-xl px-3 py-2.5 text-xs font-bold outline-none w-full cursor-pointer"
             >
-              {reports.map((r) => (
+              {sortedReports.map((r) => (
                 <option key={r.id} value={r.id} style={{ backgroundColor: '#07281f', color: '#f8fafc' }}>
                   {r.reportDate}  •  {r.labName}  •  {r.filename}
                 </option>
@@ -206,6 +231,23 @@ export const HealthReportComparison: React.FC<HealthReportComparisonProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Out of chronological order banner */}
+      {prevReport && currReport && prevReport.id !== currReport.id && prevReport.reportDate > currReport.reportDate && (
+        <div className="rounded-2xl p-4 flex items-center justify-between bg-cyan-500/10 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 text-xs font-bold">
+          <div className="flex items-center space-x-2.5">
+            <Sparkles className="w-4 h-4 flex-shrink-0 text-cyan-400" />
+            <span>Note: Baseline ({prevReport.reportDate}) is dated after Follow-Up ({currReport.reportDate}). Swap reports to show chronological health progression over time.</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleSwapReports}
+            className="ml-3 px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-700 dark:text-cyan-200 text-xs font-extrabold flex-shrink-0"
+          >
+            Swap Order
+          </button>
+        </div>
+      )}
 
       {/* Same-report warning */}
       {selectedPrevId === selectedCurrId && (

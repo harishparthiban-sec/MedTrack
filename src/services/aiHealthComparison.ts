@@ -7,7 +7,7 @@ import type { MedicalReport, HealthComparisonReport, HealthComparisonItem } from
  * - Collapse whitespace
  * - Keep only the core biomarker keywords
  */
-const normalizeTestName = (name: string): string => {
+export const normalizeTestName = (name: string): string => {
   return name
     .toLowerCase()
     .replace(/\([^)]*\)/g, '')       // strip (Glycated Hemoglobin), (25-OH), etc.
@@ -24,7 +24,7 @@ const normalizeTestName = (name: string): string => {
  * (a) one normalized name starts with / contains the other, OR
  * (b) they share ≥2 meaningful tokens (words ≥3 chars).
  */
-const testNamesMatch = (a: string, b: string): boolean => {
+export const testNamesMatch = (a: string, b: string): boolean => {
   if (a === b) return true;
   if (a.includes(b) || b.includes(a)) return true;
 
@@ -37,14 +37,12 @@ const testNamesMatch = (a: string, b: string): boolean => {
     if (tokensA.has(t)) shared++;
   }
 
-  // Need at least 2 shared tokens, or 1 token if names are short
   const minShared = Math.min(tokensA.size, tokensB.length) <= 1 ? 1 : 2;
   return shared >= minShared;
 };
 
 /**
- * Build a lookup map from normalized name → original test result,
- * allowing fuzzy matching between slight variations of the same biomarker name.
+ * Build a lookup map from normalized name → original test result
  */
 const buildNormalizedMap = (
   results: MedicalReport['testResults']
@@ -58,20 +56,74 @@ const buildNormalizedMap = (
 
 /**
  * Find the best-matching entry in the normalized map for a given normalized key.
- * First tries exact match, then falls back to fuzzy overlap matching.
  */
 const findMatch = (
   normalizedKey: string,
   normalizedMap: Map<string, MedicalReport['testResults'][0]>
 ): MedicalReport['testResults'][0] | undefined => {
-  // 1. Exact normalized match
   if (normalizedMap.has(normalizedKey)) return normalizedMap.get(normalizedKey);
 
-  // 2. Fuzzy scan
   for (const [mapKey, result] of normalizedMap.entries()) {
     if (testNamesMatch(normalizedKey, mapKey)) return result;
   }
   return undefined;
+};
+
+/**
+ * Parse standard lab reference ranges:
+ * - "4.0 - 5.6" or "70 - 100"
+ * - "< 100" or "<= 100"
+ * - "> 30" or ">= 40"
+ */
+interface ParsedRange {
+  min?: number;
+  max?: number;
+}
+
+const parseReferenceRange = (rangeStr?: string): ParsedRange | null => {
+  if (!rangeStr) return null;
+  const s = rangeStr.trim();
+
+  const rangeMatch = s.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
+  if (rangeMatch) {
+    return { min: parseFloat(rangeMatch[1]), max: parseFloat(rangeMatch[2]) };
+  }
+
+  const maxMatch = s.match(/^[<≤]\s*(\d+(?:\.\d+)?)/);
+  if (maxMatch) {
+    return { max: parseFloat(maxMatch[1]) };
+  }
+
+  const minMatch = s.match(/^[>≥]\s*(\d+(?:\.\d+)?)/);
+  if (minMatch) {
+    return { min: parseFloat(minMatch[1]) };
+  }
+
+  return null;
+};
+
+const isWithinRange = (val: number, range: ParsedRange): boolean => {
+  if (range.min !== undefined && val < range.min) return false;
+  if (range.max !== undefined && val > range.max) return false;
+  return true;
+};
+
+const distanceToRange = (val: number, range: ParsedRange): number => {
+  if (range.min !== undefined && val < range.min) return range.min - val;
+  if (range.max !== undefined && val > range.max) return val - range.max;
+  return 0;
+};
+
+/**
+ * Determine clinical direction when reference range is absent or ambiguous.
+ * Note: HDL is "Good Cholesterol", so higher is better!
+ */
+const isBiomarkerLowerBetter = (normName: string): boolean => {
+  if (/\bhdl\b/.test(normName)) return false;
+
+  return /hba1c|a1c|glucose|sugar|fbs|ppbs|rbs|ldl|vldl|triglyceride|cholesterol|creatinine|urea|bun|uric|sgpt|alt|sgot|ast|alp|alkaline|bilirubin|ggt|esr|crp|pressure|systolic|diastolic/.test(
+    normName
+  );
 };
 
 export const computeHealthComparison = (
@@ -90,9 +142,8 @@ export const computeHealthComparison = (
     const currNorm = normalizeTestName(curr.testName);
     const prev = findMatch(currNorm, prevNormalizedMap);
 
-    if (!prev) return; // No matching test in prev report
+    if (!prev) return;
 
-    // Track which prev tests have been matched to avoid double-counting
     const prevNorm = normalizeTestName(prev.testName);
     if (matchedPrevKeys.has(prevNorm)) return;
     matchedPrevKeys.add(prevNorm);
@@ -100,43 +151,80 @@ export const computeHealthComparison = (
     const valPrev = prev.value;
     const valCurr = curr.value;
 
-    // Skip if either value is 0 or invalid (avoid division artifacts)
     if (!isFinite(valPrev) || !isFinite(valCurr) || isNaN(valPrev) || isNaN(valCurr)) return;
 
     const diff = valCurr - valPrev;
     const pct = valPrev !== 0 ? (diff / valPrev) * 100 : 0;
-
-    // Determine clinical direction: lower = better for these markers
-    const isLowerBetter = /hba1c|a1c|glucose|sugar|fbs|ppbs|ldl|cholesterol|creatinine|triglyceride|urea|bun|uric/.test(currNorm);
+    const range = parseReferenceRange(curr.referenceRange || prev.referenceRange);
 
     let status: 'improved' | 'worsened' | 'stable' | 'needs_review' = 'stable';
-    let explanation = `${curr.testName} value is ${valCurr} ${curr.unit}.`;
+    let explanation = '';
 
-    if (Math.abs(pct) < 3.0) {
-      // Less than 3% change → stable
-      status = 'stable';
-      stableCount++;
-      explanation = `Remained stable from ${valPrev} to ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% change — within stable range).`;
-    } else if (isLowerBetter) {
-      if (diff < 0) {
+    if (range) {
+      const prevInRange = isWithinRange(valPrev, range);
+      const currInRange = isWithinRange(valCurr, range);
+      const prevDist = distanceToRange(valPrev, range);
+      const currDist = distanceToRange(valCurr, range);
+
+      if (!prevInRange && currInRange) {
         status = 'improved';
         improvedCount++;
-        explanation = `Improved! Decreased from ${valPrev} to ${valCurr} ${curr.unit} (−${Math.abs(pct).toFixed(1)}% drop towards target).`;
-      } else {
+        explanation = `Improved to Healthy Range! Normalized from ${valPrev} to ${valCurr} ${curr.unit} (now within standard reference ${curr.referenceRange || prev.referenceRange}).`;
+      } else if (prevInRange && !currInRange) {
         status = 'worsened';
         worsenedCount++;
-        explanation = `Needs Attention ⚠: Increased from ${valPrev} to ${valCurr} ${curr.unit} (+${Math.abs(pct).toFixed(1)}% rise — away from target).`;
+        explanation = `Needs Attention ⚠: Shifted outside reference range from ${valPrev} to ${valCurr} ${curr.unit} (standard: ${curr.referenceRange || prev.referenceRange}).`;
+      } else if (!prevInRange && !currInRange) {
+        // Both outside range: check if distance to target boundary improved or worsened
+        if (currDist < prevDist && (prevDist - currDist) / (prevDist || 1) >= 0.03) {
+          status = 'improved';
+          improvedCount++;
+          explanation = `Improved! Progressed closer to target range from ${valPrev} to ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% shift towards reference).`;
+        } else if (currDist > prevDist && (currDist - prevDist) / (prevDist || 1) >= 0.03) {
+          status = 'worsened';
+          worsenedCount++;
+          explanation = `Needs Attention ⚠: Moved further outside target range from ${valPrev} to ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% deviation).`;
+        } else {
+          status = 'stable';
+          stableCount++;
+          explanation = `Remained stable from ${valPrev} to ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% change).`;
+        }
+      } else {
+        // Both inside healthy range
+        if (Math.abs(pct) < 15.0) {
+          status = 'stable';
+          stableCount++;
+          explanation = `Healthy & Stable: Value maintained at ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% change — comfortably within optimal reference range).`;
+        } else {
+          const lowerBetter = isBiomarkerLowerBetter(currNorm);
+          if ((lowerBetter && diff < 0) || (!lowerBetter && diff > 0)) {
+            status = 'improved';
+            improvedCount++;
+            explanation = `Improved! Optimized from ${valPrev} to ${valCurr} ${curr.unit} within healthy range.`;
+          } else {
+            status = 'stable';
+            stableCount++;
+            explanation = `Healthy Range: Maintained within target at ${valCurr} ${curr.unit} (${curr.referenceRange || prev.referenceRange}).`;
+          }
+        }
       }
     } else {
-      // Higher is better (Vitamin D, HDL, Hemoglobin, etc.)
-      if (diff > 0) {
-        status = 'improved';
-        improvedCount++;
-        explanation = `Improved! Increased from ${valPrev} to ${valCurr} ${curr.unit} (+${Math.abs(pct).toFixed(1)}% rise towards optimal range).`;
+      // Fallback when no range is provided
+      if (Math.abs(pct) < 3.0) {
+        status = 'stable';
+        stableCount++;
+        explanation = `Remained stable from ${valPrev} to ${valCurr} ${curr.unit} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% change — within stable range).`;
       } else {
-        status = 'worsened';
-        worsenedCount++;
-        explanation = `Needs Attention ⚠: Decreased from ${valPrev} to ${valCurr} ${curr.unit} (−${Math.abs(pct).toFixed(1)}% drop from previous level).`;
+        const lowerBetter = isBiomarkerLowerBetter(currNorm);
+        if ((lowerBetter && diff < 0) || (!lowerBetter && diff > 0)) {
+          status = 'improved';
+          improvedCount++;
+          explanation = `Improved! Shifted from ${valPrev} to ${valCurr} ${curr.unit} (${diff < 0 ? '−' : '+'}${Math.abs(pct).toFixed(1)}% shift towards optimal).`;
+        } else {
+          status = 'worsened';
+          worsenedCount++;
+          explanation = `Needs Attention ⚠: Shifted from ${valPrev} to ${valCurr} ${curr.unit} (${diff < 0 ? '−' : '+'}${Math.abs(pct).toFixed(1)}% shift away from optimal).`;
+        }
       }
     }
 
@@ -166,3 +254,4 @@ export const computeHealthComparison = (
     items,
   };
 };
+

@@ -28,6 +28,7 @@ import type {
   MedicalReport,
 } from '../types';
 import { calculateAdherenceStreak } from '../services/adherence';
+import { computeHealthComparison } from '../services/aiHealthComparison';
 
 interface DashboardProps {
   user: UserProfile | null;
@@ -521,52 +522,53 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             ) : (
               /* 2+ Reports: Show comparative trajectory */
-              <div className="space-y-3.5 text-xs font-bold">
-                <div className="text-[11px] text-slate-400 font-semibold flex items-center justify-between">
-                  <span>Comparing latest 2 reports</span>
-                  <span>{reports[0].reportDate}</span>
-                </div>
-                {(() => {
-                  const curr = reports[0];
-                  const prev = reports[1];
-                  const displayTests = curr.testResults.slice(0, 4);
-                  return displayTests.map((tCurr, idx) => {
-                    const tPrev = prev.testResults.find(
-                      (p) => p.testName.toLowerCase() === tCurr.testName.toLowerCase()
-                    );
-                    const improved = tPrev && tPrev.isAbnormal && !tCurr.isAbnormal;
-                    const worsened = tPrev && !tPrev.isAbnormal && tCurr.isAbnormal;
+              (() => {
+                const sorted = [...reports].sort((a, b) => (a.reportDate || '').localeCompare(b.reportDate || ''));
+                const prev = sorted[0];
+                const curr = sorted[sorted.length - 1];
+                const comp = computeHealthComparison(prev, curr);
+                const displayItems = comp.items.slice(0, 4);
 
-                    return (
-                      <div key={idx} className={`p-3.5 rounded-2xl border flex items-center justify-between ${subCardBg}`}>
-                        <div>
-                          <span className={`block text-[11px] ${labelText}`}>{tCurr.testName}</span>
-                          <span className={`font-extrabold text-sm ${tCurr.isAbnormal ? 'text-amber-500' : 'text-emerald-500'}`}>
-                            {tCurr.value} {tCurr.unit}
-                          </span>
-                        </div>
-                        {improved ? (
-                          <span className="px-2.5 py-1 rounded-xl text-[10px] bg-emerald-500/20 text-emerald-600 border border-emerald-500/30 flex items-center gap-1">
-                            <TrendingDown className="w-3 h-3" /> Improved
-                          </span>
-                        ) : worsened ? (
-                          <span className="px-2.5 py-1 rounded-xl text-[10px] bg-amber-500/20 text-amber-600 border border-amber-500/30 flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3" /> Worsened
-                          </span>
-                        ) : tCurr.isAbnormal ? (
-                          <span className="px-2.5 py-1 rounded-xl text-[10px] bg-amber-500/20 text-amber-600 border border-amber-500/30 flex items-center">
-                            Needs Review
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-xl text-[10px] bg-emerald-500/20 text-emerald-600 border border-emerald-500/30 flex items-center">
-                            ✓ Normal
-                          </span>
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
+                return (
+                  <div className="space-y-3.5 text-xs font-bold">
+                    <div className="text-[11px] text-slate-400 font-semibold flex items-center justify-between">
+                      <span>Comparing progression</span>
+                      <span>{prev.reportDate} → {curr.reportDate}</span>
+                    </div>
+                    {displayItems.length === 0 ? (
+                      <p className="text-xs opacity-60">No overlapping biomarkers found between reports.</p>
+                    ) : (
+                      displayItems.map((item, idx) => {
+                        const isImproved = item.status === 'improved';
+                        const isWorsened = item.status === 'worsened';
+                        return (
+                          <div key={idx} className={`p-3.5 rounded-2xl border flex items-center justify-between ${subCardBg}`}>
+                            <div>
+                              <span className={`block text-[11px] ${labelText}`}>{item.testName}</span>
+                              <span className={`font-extrabold text-sm ${isWorsened ? 'text-rose-500' : isImproved ? 'text-emerald-500' : 'text-cyan-500'}`}>
+                                {item.currentValue} {item.unit}
+                              </span>
+                            </div>
+                            {isImproved ? (
+                              <span className="px-2.5 py-1 rounded-xl text-[10px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                                <TrendingUp className="w-3 h-3" /> Improved
+                              </span>
+                            ) : isWorsened ? (
+                              <span className="px-2.5 py-1 rounded-xl text-[10px] bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1">
+                                <TrendingDown className="w-3 h-3" /> Needs Review
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-xl text-[10px] bg-slate-500/15 text-slate-600 dark:text-slate-300 border border-slate-500/30 flex items-center">
+                                ✓ Stable
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                );
+              })()
             )}
           </div>
 
