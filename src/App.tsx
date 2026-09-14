@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './components/Dashboard';
 import { UploadCenter } from './components/UploadCenter';
@@ -280,7 +281,9 @@ export function App() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${theme === 'light' ? 'bg-[#f8fafc] text-slate-900' : 'bg-[#041a14] text-slate-100'}`}>
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-500 overflow-x-hidden ${theme === 'light' ? 'bg-[#f5f8f7] text-slate-900' : 'bg-[#031813] text-slate-100'}`}>
+      <div aria-hidden="true" className="app-ambient app-ambient-one" />
+      <div aria-hidden="true" className="app-ambient app-ambient-two" />
       
       {/* Navigation Header */}
       <Navbar
@@ -297,63 +300,72 @@ export function App() {
       />
 
       {/* Main App Workspace */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-12">
-        {activeTab === 'dashboard' && (
-          <Dashboard
-            user={user}
-            schedules={schedules}
-            adherenceLogs={adherenceLogs}
-            prescriptions={prescriptions}
-            reports={reports}
-            setActiveTab={setActiveTab}
-            onLogAction={handleLogAction}
-            theme={theme}
-          />
-        )}
+      <main className="relative z-10 flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-12">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: -6, filter: 'blur(3px)' }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {activeTab === 'dashboard' && (
+              <Dashboard
+                user={user}
+                schedules={schedules}
+                adherenceLogs={adherenceLogs}
+                prescriptions={prescriptions}
+                reports={reports}
+                setActiveTab={setActiveTab}
+                onLogAction={handleLogAction}
+                theme={theme}
+              />
+            )}
 
+            {activeTab === 'schedule' && (
+              <MedicineSchedule
+                schedules={schedules}
+                adherenceLogs={adherenceLogs}
+                onLogAction={handleLogAction}
+                onDeleteSchedule={handleDeleteSchedule}
+                setActiveTab={setActiveTab}
+              />
+            )}
 
-        {activeTab === 'schedule' && (
-          <MedicineSchedule
-            schedules={schedules}
-            adherenceLogs={adherenceLogs}
-            onLogAction={handleLogAction}
-            onDeleteSchedule={handleDeleteSchedule}
-            setActiveTab={setActiveTab}
-          />
-        )}
+            {activeTab === 'upload' && (
+              <UploadCenter
+                onPrescriptionConfirmed={handlePrescriptionConfirmed}
+                onReportConfirmed={handleReportConfirmed}
+                setActiveTab={setActiveTab}
+                reportsCount={reports.length}
+              />
+            )}
 
-        {activeTab === 'upload' && (
-          <UploadCenter
-            onPrescriptionConfirmed={handlePrescriptionConfirmed}
-            onReportConfirmed={handleReportConfirmed}
-            setActiveTab={setActiveTab}
-            reportsCount={reports.length}
-          />
-        )}
+            {activeTab === 'calendar' && (
+              <AdherenceCalendar adherenceLogs={adherenceLogs} schedules={schedules} theme={theme} />
+            )}
 
-        {activeTab === 'calendar' && (
-          <AdherenceCalendar adherenceLogs={adherenceLogs} schedules={schedules} theme={theme} />
-        )}
+            {activeTab === 'comparison' && (
+              <HealthReportComparison
+                reports={reports}
+                initialComparison={comparisonReport}
+                onUpdateReport={handleUpdateReport}
+                setActiveTab={setActiveTab}
+              />
+            )}
 
-        {activeTab === 'comparison' && (
-          <HealthReportComparison
-            reports={reports}
-            initialComparison={comparisonReport}
-            onUpdateReport={handleUpdateReport}
-            setActiveTab={setActiveTab}
-          />
-        )}
-
-        {activeTab === 'reports' && (
-          <ReportsHistory
-            prescriptions={prescriptions}
-            reports={reports}
-            onDeletePrescription={handleDeletePrescription}
-            onDeleteReport={handleDeleteReport}
-            onUpdateReport={handleUpdateReport}
-            setActiveTab={setActiveTab}
-          />
-        )}
+            {activeTab === 'reports' && (
+              <ReportsHistory
+                prescriptions={prescriptions}
+                reports={reports}
+                onDeletePrescription={handleDeletePrescription}
+                onDeleteReport={handleDeleteReport}
+                onUpdateReport={handleUpdateReport}
+                setActiveTab={setActiveTab}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Account Profile Details Modal */}
@@ -376,10 +388,10 @@ export function App() {
       />
 
       {/* Subtle Minimal Footer */}
-      <footer className={`border-t py-6 text-center text-xs ${theme === 'light' ? 'bg-white border-slate-200 text-slate-600' : 'bg-[#03140f] border-emerald-900/40 text-emerald-300/60'}`}>
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>MedTrack AI — Smart Health & Medicine Tracker</span>
-          <span className="font-semibold">Private & Secure • SQLite Backend</span>
+      <footer className={`relative z-10 border-t py-6 text-center text-xs ${theme === 'light' ? 'bg-white/60 border-slate-200/80 text-slate-500' : 'bg-[#02120e]/70 border-emerald-900/40 text-emerald-300/60'}`}>
+        <div className="max-w-[1440px] mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span className="font-bold tracking-tight">MedTrack AI <span className="font-medium opacity-70">— your health, in one clear view</span></span>
+          <span className="font-semibold">Private &amp; secure health workspace</span>
         </div>
       </footer>
     </div>

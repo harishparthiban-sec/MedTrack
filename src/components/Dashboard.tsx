@@ -1,34 +1,24 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import {
-  Pill,
-  CheckCircle2,
-  XCircle,
-  Calendar,
-  Upload,
-  BarChart3,
-  Flame,
   ArrowUpRight,
-  ShieldAlert,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
-  FileText,
-  Clock,
-  Sunrise,
-  Sun,
-  Moon,
+  CalendarDays,
+  Check,
+  CheckCircle2,
   ChevronRight,
+  Clock3,
+  FileText,
+  Flame,
+  HeartPulse,
+  Pill,
+  Plus,
+  Sparkles,
+  TrendingUp,
+  Upload,
+  X,
 } from 'lucide-react';
-import type {
-  UserProfile,
-  MedicineScheduleItem,
-  AdherenceLog,
-  Prescription,
-  HealthComparisonReport,
-  MedicalReport,
-} from '../types';
+import type { AdherenceLog, MedicalReport, MedicineScheduleItem, Prescription, UserProfile } from '../types';
 import { calculateAdherenceStreak } from '../services/adherence';
-import { computeHealthComparison, findMatch } from '../services/aiHealthComparison';
 
 interface DashboardProps {
   user: UserProfile | null;
@@ -36,11 +26,19 @@ interface DashboardProps {
   adherenceLogs: AdherenceLog[];
   prescriptions: Prescription[];
   reports?: MedicalReport[];
-  comparisonReport?: HealthComparisonReport | null;
   setActiveTab: (tab: string) => void;
   onLogAction: (scheduleId: string, status: 'taken' | 'ignored') => void;
   theme: 'dark' | 'light';
 }
+
+const motionIn = {
+  initial: { opacity: 0, y: 18 },
+  animate: { opacity: 1, y: 0 },
+};
+
+const formatDate = () => new Intl.DateTimeFormat('en-US', {
+  weekday: 'long', month: 'long', day: 'numeric',
+}).format(new Date());
 
 export const Dashboard: React.FC<DashboardProps> = ({
   user,
@@ -52,629 +50,120 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onLogAction,
   theme,
 }) => {
-  const todayStr = new Date().toISOString().split('T')[0];
   const isDark = theme === 'dark';
-
-  // Adherence Calculations (Deduplicated strictly to active schedules)
-  const activeSchedules = schedules.filter((s) => s.active);
-  const activeScheduleIds = new Set(activeSchedules.map((s) => s.id));
-  const todayLogs = adherenceLogs.filter(
-    (l) => l.date === todayStr && activeScheduleIds.has(l.scheduleId)
-  );
-
-  const takenScheduleIds = new Set(
-    todayLogs.filter((l) => l.status === 'taken').map((l) => l.scheduleId)
-  );
-  const takenTodayCount = takenScheduleIds.size;
-  const totalToday = activeSchedules.length;
-  const adherencePercentage =
-    totalToday > 0 ? Math.min(100, Math.round((takenTodayCount / totalToday) * 100)) : 100;
-
-  // Real-time Consecutive Daily Adherence Streak
-  const currentStreak = calculateAdherenceStreak(adherenceLogs);
-
-  // Next Dose Logic
-  const loggedScheduleIds = new Set(todayLogs.map((l) => l.scheduleId));
-  const pendingSchedules = activeSchedules.filter((s) => !loggedScheduleIds.has(s.id));
-  const nextDose = pendingSchedules[0] || activeSchedules[0] || null;
-
-  // Time of Day Greeting
-  const currentHour = new Date().getHours();
-  const greeting =
-    currentHour < 12 ? 'Good Morning' : currentHour < 17 ? 'Good Afternoon' : 'Good Evening';
-
-  // Theme-aware classes
-  const cardBg = isDark
-    ? 'bg-[#07281f] border-emerald-900/30'
-    : 'bg-white border-slate-200 shadow-sm';
-
-  const labelText = isDark ? 'text-emerald-300/60' : 'text-slate-500';
-  const titleText = isDark ? 'text-white' : 'text-slate-900';
-  const bodyText = isDark ? 'text-slate-300' : 'text-slate-600';
-  const ringTrack = isDark ? 'text-emerald-900' : 'text-slate-200';
-
-  const subCardBg = isDark
-    ? 'bg-emerald-950/60 border-emerald-900/30'
-    : 'bg-slate-50 border-slate-200';
-
-  const scheduleItemDefault = isDark
-    ? 'bg-[#031f17] border-emerald-900/30'
-    : 'bg-slate-50 border-slate-200';
-
-  const iconBoxBg = isDark ? 'bg-emerald-900/40 border-emerald-800/50' : 'bg-slate-100 border-slate-200';
-  const iconColor = isDark ? 'text-emerald-400' : 'text-emerald-600';
-  const quickNavBg = isDark
-    ? 'bg-[#031f17] hover:bg-emerald-950 border-emerald-900/30 text-emerald-100'
-    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800';
-
-  const navLinkCls = isDark
-    ? 'text-emerald-400 hover:text-emerald-300'
-    : 'text-emerald-600 hover:text-emerald-700';
-
-  const borderDivider = isDark ? 'border-emerald-900/30' : 'border-slate-200';
+  const today = new Date().toISOString().split('T')[0];
+  const activeSchedules = schedules.filter((item) => item.active);
+  const todayLogs = adherenceLogs.filter((item) => item.date === today);
+  const takenIds = new Set(todayLogs.filter((item) => item.status === 'taken').map((item) => item.scheduleId));
+  const resolvedIds = new Set(todayLogs.map((item) => item.scheduleId));
+  const pendingSchedules = activeSchedules.filter((item) => !resolvedIds.has(item.id));
+  const adherence = activeSchedules.length ? Math.round((takenIds.size / activeSchedules.length) * 100) : 0;
+  const streak = calculateAdherenceStreak(adherenceLogs);
+  const nextDose = pendingSchedules[0];
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const latestReport = [...reports].sort((a, b) => (b.reportDate || '').localeCompare(a.reportDate || ''))[0];
+  const abnormalCount = latestReport?.testResults.filter((item) => item.isAbnormal).length ?? 0;
+  const surface = isDark ? 'border-white/[0.08] bg-[#09251f] text-white' : 'border-slate-200 bg-white text-[#123d35] shadow-[0_14px_38px_rgba(15,42,36,0.06)]';
+  const muted = isDark ? 'text-emerald-100/55' : 'text-slate-500';
+  const subduedSurface = isDark ? 'bg-white/[0.055] border-white/[0.07]' : 'bg-[#f3f7f4] border-[#e1ece6]';
 
   return (
-    <div className="space-y-8 pb-16 pt-2">
-      
-      {/* 1. Hero Welcome Banner */}
-      <div className="relative overflow-hidden rounded-3xl p-7 sm:p-10 shadow-2xl transition-all duration-300">
-        
-        {/* Subtle Background Gradient Overlay */}
-        <div 
-          className={`absolute inset-0 transition-all duration-300 ${
-            isDark 
-              ? 'bg-gradient-to-r from-emerald-950 via-[#063b2c] to-[#04241b] border border-emerald-800/40 shadow-emerald-950/40' 
-              : 'bg-gradient-to-r from-emerald-100 via-teal-50 to-emerald-50/80 border border-emerald-200 shadow-emerald-500/10'
-          }`}
-        />
-
-        {/* Ambient Glow Orbs */}
-        <div 
-          className={`absolute -top-24 -right-24 w-80 h-80 rounded-full blur-3xl pointer-events-none transition-all duration-300 ${
-            isDark ? 'bg-emerald-500/10' : 'bg-emerald-400/20'
-          }`}
-        />
-        <div 
-          className={`absolute -bottom-24 -left-24 w-80 h-80 rounded-full blur-3xl pointer-events-none transition-all duration-300 ${
-            isDark ? 'bg-teal-500/10' : 'bg-teal-300/25'
-          }`}
-        />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-extrabold border ${
-                isDark 
-                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' 
-                  : 'bg-emerald-600/10 border-emerald-600/30 text-emerald-800'
-              }`}>
-                {greeting}, {user?.name || 'Patient'}
-              </span>
-              <span 
-                className={`text-xs font-semibold px-3 py-1 rounded-full border ${
-                  isDark
-                    ? 'bg-black/30 border-white/10 text-emerald-200/90'
-                    : 'bg-white/90 border-slate-200 text-slate-700 shadow-sm'
-                }`}
-              >
-                📅 {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-              </span>
-            </div>
-
-            <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Health &amp; Medication Command Center
-            </h1>
-
-            <p className={`text-sm max-w-xl font-medium ${isDark ? 'text-emerald-200/80' : 'text-slate-600'}`}>
-              Track daily medicines, inspect prescription extractions, and monitor blood report biomarkers in real-time.
-            </p>
+    <div className="dashboard-new space-y-6 pb-16 pt-2">
+      <motion.section {...motionIn} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+        <div>
+          <div className={`mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.17em] ${isDark ? 'text-[#c5ff7b]' : 'text-emerald-700'}`}>
+            <span className={`h-2 w-2 rounded-full ${isDark ? 'bg-[#c5ff7b]' : 'bg-emerald-500'}`} /> Your daily brief
           </div>
-
-          {/* Quick Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => setActiveTab('upload')}
-              className="px-5 py-3.5 rounded-2xl btn-primary-visible text-xs font-extrabold flex items-center space-x-2 cursor-pointer shadow-lg"
-            >
-              <Upload className="w-4 h-4" />
-              <span>Upload Document</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('schedule')}
-              className={`px-5 py-3.5 rounded-2xl text-xs font-extrabold flex items-center space-x-2 cursor-pointer transition-all ${
-                isDark
-                  ? 'border border-white/20 bg-white/10 hover:bg-white/20 text-white'
-                  : 'border border-emerald-300 bg-white hover:bg-emerald-50/60 text-emerald-900 shadow-sm'
-              }`}
-            >
-              <Pill className="w-4 h-4 text-emerald-600" />
-              <span>Daily Dose Schedule</span>
-            </button>
-          </div>
+          <h1 className={`max-w-3xl text-4xl font-black leading-[0.9] tracking-[-0.07em] sm:text-5xl lg:text-6xl ${isDark ? 'text-white' : 'text-[#123d35]'}`}>
+            {greeting}, {user?.name?.split(' ')[0] || 'there'}.<br />Let&apos;s keep your <span className={isDark ? 'text-[#c5ff7b]' : 'text-emerald-500'}>care in flow.</span>
+          </h1>
         </div>
-      </div>
-
-      {/* 2. Key Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-
-        {/* Metric 1: Adherence Score Ring */}
-        <div className={`rounded-3xl p-6 flex items-center justify-between border ${cardBg}`}>
-          <div className="space-y-1">
-            <span className={`text-xs font-extrabold uppercase tracking-wider block ${labelText}`}>Today's Adherence</span>
-            <div className={`text-3xl font-extrabold ${titleText}`}>{adherencePercentage}%</div>
-            <span className="text-[11px] font-extrabold text-emerald-500 block">
-              {totalToday === 0 ? 'No Doses Scheduled' : `${takenTodayCount} of ${totalToday} Doses Taken`}
-            </span>
-          </div>
-
-          <div className="relative w-16 h-16 flex items-center justify-center">
-            <svg className="w-full h-full transform -rotate-90">
-              <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="6" className={ringTrack} fill="transparent" />
-              <circle
-                cx="32" cy="32" r="26"
-                stroke="currentColor" strokeWidth="6"
-                className="text-emerald-500 transition-all duration-1000 ease-out"
-                fill="transparent"
-                strokeDasharray={163}
-                strokeDashoffset={163 - (163 * adherencePercentage) / 100}
-                strokeLinecap="round"
-              />
-            </svg>
-            <Sparkles className="w-5 h-5 text-emerald-500 absolute" />
-          </div>
+        <div className="flex items-center gap-2">
+          <div className={`hidden rounded-xl border px-3 py-2 text-xs font-bold sm:flex sm:items-center sm:gap-2 ${subduedSurface} ${muted}`}><CalendarDays className="h-3.5 w-3.5" />{formatDate()}</div>
+          <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => setActiveTab('upload')} className="flex items-center gap-2 rounded-xl bg-[#123d35] px-4 py-3 text-xs font-black text-white shadow-lg shadow-emerald-950/15"><Plus className="h-4 w-4 text-[#c5ff7b]" /> Add record</motion.button>
         </div>
+      </motion.section>
 
-        {/* Metric 2: Streak Counter */}
-        <div className={`rounded-3xl p-6 flex items-center justify-between border ${cardBg}`}>
-          <div className="space-y-1">
-            <span className={`text-xs font-extrabold uppercase tracking-wider block ${labelText}`}>Adherence Streak</span>
-            <div className={`text-3xl font-extrabold flex items-center ${titleText}`}>
-              {currentStreak} <span className="text-amber-500 text-xl ml-1">{currentStreak === 1 ? 'Day' : 'Days'}</span>
-            </div>
-            {currentStreak > 0 ? (
-              <span className="text-[11px] font-extrabold text-amber-500 block">
-                🔥 {currentStreak > 1 ? `${currentStreak} Days Consistent` : 'Streak Started Today'}
-              </span>
-            ) : (
-              <span className="text-[11px] font-extrabold text-slate-400 dark:text-emerald-200/60 block">
-                Log today&apos;s dose to start a streak
-              </span>
-            )}
-          </div>
-          <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center ${
-            currentStreak > 0
-              ? 'bg-amber-500/15 border-amber-500/30 text-amber-500'
-              : 'bg-slate-100 dark:bg-emerald-950/40 border-slate-200 dark:border-emerald-900/30 text-slate-400'
-          }`}>
-            <Flame className="w-7 h-7" />
-          </div>
-        </div>
-
-        {/* Metric 3: Active Prescriptions */}
-        <div className={`rounded-3xl p-6 flex items-center justify-between border ${cardBg}`}>
-          <div className="space-y-1">
-            <span className={`text-xs font-extrabold uppercase tracking-wider block ${labelText}`}>Prescriptions Active</span>
-            <div className={`text-3xl font-extrabold ${titleText}`}>{prescriptions.length}</div>
-            <span className="text-[11px] font-extrabold text-cyan-500 block">📄 {prescriptions.length === 1 ? 'Prescription' : 'Prescriptions'} Active</span>
-          </div>
-          <div className="w-14 h-14 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-500">
-            <FileText className="w-7 h-7" />
-          </div>
-        </div>
-
-        {/* Metric 4: Health Reports */}
-        <div className={`rounded-3xl p-6 flex items-center justify-between border ${cardBg}`}>
-          <div className="space-y-1">
-            <span className={`text-xs font-extrabold uppercase tracking-wider block ${labelText}`}>Lab Reports</span>
-            <div className={`text-3xl font-extrabold ${titleText}`}>{reports.length} {reports.length === 1 ? 'Report' : 'Reports'}</div>
-            <span className="text-[11px] font-extrabold text-indigo-500 block">📊 Biomarkers Compared</span>
-          </div>
-          <div className="w-14 h-14 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-500">
-            <BarChart3 className="w-7 h-7" />
-          </div>
-        </div>
-
-      </div>
-
-      {/* 3. Main Workspace Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-
-        {/* Left 8 Cols: Next Dose & Daily Timeline */}
-        <div className="lg:col-span-8 space-y-8">
-
-          {/* Next Scheduled Dose Highlight Card */}
-          {nextDose ? (
-            <div className={`rounded-3xl p-7 border-2 border-emerald-500/40 space-y-6 ${isDark ? 'bg-[#042f1e]' : 'bg-emerald-50'}`}>
-
-              <div className={`flex items-center justify-between border-b pb-4 ${borderDivider}`}>
-                <div className="flex items-center space-x-3">
-                  <div className={`w-10 h-10 rounded-2xl border flex items-center justify-center font-bold ${isDark ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' : 'bg-emerald-100 border-emerald-300 text-emerald-700'}`}>
-                    <Pill className="w-5 h-5 transform -rotate-45" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-extrabold text-emerald-500 uppercase tracking-wider block">
-                      Immediate Dose Up Next
-                    </span>
-                    <h3 className={`text-2xl font-extrabold ${titleText}`}>{nextDose.name}</h3>
-                  </div>
-                </div>
-
-                <span className="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-amber-500/20 text-amber-500 border border-amber-500/40 flex items-center">
-                  <Clock className="w-3.5 h-3.5 mr-1.5" /> Scheduled: {nextDose.time}
-                </span>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <motion.section {...motionIn} transition={{ duration: 0.55, delay: 0.06, ease: [0.16, 1, 0.3, 1] }} className="relative overflow-hidden rounded-[2rem] bg-[#123d35] p-6 text-white sm:p-8 xl:col-span-7">
+          <div aria-hidden="true" className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-[#c5ff7b]/20 blur-3xl" />
+          <div aria-hidden="true" className="absolute -bottom-36 right-20 h-64 w-64 rounded-full bg-cyan-300/15 blur-3xl" />
+          <div className="relative flex h-full flex-col justify-between gap-9">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#c5ff7b]"><Sparkles className="h-3.5 w-3.5" /> Today&apos;s care plan</p>
+                <h2 className="mt-3 max-w-lg text-3xl font-black leading-[0.96] tracking-[-0.06em] sm:text-4xl">
+                  {nextDose ? <>Your next dose is <span className="text-[#c5ff7b]">ready when you are.</span></> : activeSchedules.length ? <>You&apos;re all <span className="text-[#c5ff7b]">caught up.</span></> : <>Start a plan that <span className="text-[#c5ff7b]">works for you.</span></>}
+                </h2>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-bold">
-                <div className={`p-3.5 rounded-2xl border ${subCardBg}`}>
-                  <span className={`text-[10px] uppercase block mb-1 ${labelText}`}>Dosage Amount</span>
-                  <span className={`text-sm font-extrabold ${titleText}`}>{nextDose.dosage}</span>
-                </div>
-                <div className={`p-3.5 rounded-2xl border ${subCardBg}`}>
-                  <span className={`text-[10px] uppercase block mb-1 ${labelText}`}>Timing Instruction</span>
-                  <span className="text-sm font-extrabold text-emerald-500">{nextDose.timingInstruction}</span>
-                </div>
-                <div className={`p-3.5 rounded-2xl border ${subCardBg}`}>
-                  <span className={`text-[10px] uppercase block mb-1 ${labelText}`}>Duration Remaining</span>
-                  <span className="text-sm font-extrabold text-cyan-500">{nextDose.remainingDays} days left</span>
-                </div>
-              </div>
-
-              {/* Dose Action Buttons */}
-              <div className="flex items-center space-x-3 pt-2">
-                <button
-                  onClick={() => onLogAction(nextDose.id, 'taken')}
-                  className="flex-1 py-3.5 rounded-2xl btn-primary-visible text-xs font-extrabold flex items-center justify-center space-x-2 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>✅ Mark as Taken</span>
-                </button>
-
-                <button
-                  onClick={() => onLogAction(nextDose.id, 'ignored')}
-                  className="flex-1 py-3.5 rounded-2xl btn-secondary-visible text-xs font-extrabold flex items-center justify-center space-x-2 cursor-pointer"
-                >
-                  <XCircle className="w-4 h-4" />
-                  <span>✕ Mark as Ignored</span>
-                </button>
-              </div>
-
-            </div>
-          ) : activeSchedules.length === 0 ? (
-            <div className={`rounded-3xl p-8 text-center space-y-3 border ${cardBg}`}>
-              <Pill className="w-12 h-12 text-emerald-500 mx-auto" />
-              <h3 className={`text-xl font-extrabold ${titleText}`}>No Active Medication Schedules</h3>
-              <p className={`text-xs ${bodyText}`}>Upload your doctor prescription to automatically schedule daily doses and reminders.</p>
-              <button
-                type="button"
-                onClick={() => setActiveTab('upload')}
-                className="mt-2 px-5 py-2.5 rounded-xl btn-primary-visible text-xs font-extrabold inline-flex items-center space-x-2 cursor-pointer shadow-sm"
-              >
-                <Upload className="w-4 h-4" />
-                <span>Upload Prescription</span>
-              </button>
-            </div>
-          ) : (
-            <div className={`rounded-3xl p-8 text-center space-y-3 border ${cardBg}`}>
-              <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-              <h3 className={`text-xl font-extrabold ${titleText}`}>All Doses Logged For Today!</h3>
-              <p className={`text-xs ${bodyText}`}>You have completed all scheduled medications for today.</p>
-            </div>
-          )}
-
-          {/* Today's Schedule Overview List */}
-          <div className={`rounded-3xl p-6 sm:p-7 space-y-5 border ${cardBg}`}>
-            <div className="flex items-center justify-between">
-              <h3 className={`text-lg font-extrabold flex items-center space-x-2 ${titleText}`}>
-                <Clock className={`w-5 h-5 ${iconColor}`} />
-                <span>Today's Medicine Schedule ({activeSchedules.length})</span>
-              </h3>
-
-              <button
-                onClick={() => setActiveTab('schedule')}
-                className={`text-xs font-extrabold flex items-center space-x-1 cursor-pointer ${navLinkCls}`}
-              >
-                <span>View Full Schedule</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/10 text-[#c5ff7b]"><HeartPulse className="h-6 w-6" /></div>
             </div>
 
-            <div className="space-y-3">
-              {activeSchedules.length === 0 && (
-                <p className={`text-xs text-center py-4 ${bodyText}`}>No medicines scheduled yet. Add a schedule to get started.</p>
-              )}
-              {activeSchedules.map((item) => {
-                const log = todayLogs.find((l) => l.scheduleId === item.id);
-                const isTaken = log?.status === 'taken';
-                const isIgnored = log?.status === 'ignored';
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${
-                      isTaken
-                        ? isDark ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-emerald-50 border-emerald-300'
-                        : isIgnored
-                        ? isDark ? 'bg-rose-500/10 border-rose-500/40' : 'bg-rose-50 border-rose-300'
-                        : scheduleItemDefault
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3.5">
-                      <div className={`w-9 h-9 rounded-xl border flex items-center justify-center font-bold ${iconBoxBg}`}>
-                        {item.timeCategory === 'Morning' && <Sunrise className="w-4 h-4 text-amber-500" />}
-                        {item.timeCategory === 'Afternoon' && <Sun className="w-4 h-4 text-cyan-500" />}
-                        {item.timeCategory === 'Night' && <Moon className="w-4 h-4 text-indigo-500" />}
-                      </div>
-
-                      <div>
-                        <h4 className={`text-sm font-extrabold ${titleText}`}>{item.name}</h4>
-                        <span className={`text-xs ${bodyText}`}>
-                          {item.dosage} • <strong className="text-emerald-500">{item.time}</strong> ({item.timingInstruction})
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      {isTaken ? (
-                        <span className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-500 text-white">
-                          ✓ Taken ({log.timestamp})
-                        </span>
-                      ) : isIgnored ? (
-                        <span className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-rose-500 text-white">
-                          ✕ Ignored
-                        </span>
-                      ) : (
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => onLogAction(item.id, 'taken')}
-                            className="px-3.5 py-1.5 rounded-xl btn-primary-visible text-xs font-extrabold cursor-pointer"
-                          >
-                            ✅ Taken
-                          </button>
-                          <button
-                            onClick={() => onLogAction(item.id, 'ignored')}
-                            className="px-3.5 py-1.5 rounded-xl btn-secondary-visible text-xs font-extrabold cursor-pointer"
-                          >
-                            ✕ Ignored
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Right 4 Cols */}
-        <div className="lg:col-span-4 space-y-8">
-
-          {/* Health Lab Report Trends Card */}
-          <div className={`rounded-3xl p-6 space-y-5 border ${cardBg}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${borderDivider}`}>
-              <h3 className={`text-base font-extrabold flex items-center space-x-2 ${titleText}`}>
-                <BarChart3 className="w-5 h-5 text-indigo-500" />
-                <span>Lab Test Progress</span>
-              </h3>
-
-              {reports.length > 0 && (
-                <button
-                  onClick={() => setActiveTab(reports.length >= 2 ? 'comparison' : 'reports')}
-                  className="text-xs font-extrabold text-indigo-500 hover:text-indigo-400 cursor-pointer"
-                >
-                  {reports.length >= 2 ? 'Full Analysis' : 'View in History'}
-                </button>
-              )}
-            </div>
-
-            {/* Dynamic Biomarker Items from User's Real Uploaded Reports */}
-            {reports.length === 0 ? (
-              <div className="text-center py-6 space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-500 mx-auto">
-                  <BarChart3 className="w-6 h-6" />
+            {nextDose ? (
+              <div className="rounded-2xl border border-white/10 bg-black/15 p-4 backdrop-blur-md sm:flex sm:items-center sm:justify-between sm:p-5">
+                <div className="flex items-center gap-4">
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c5ff7b] text-[#123d35]"><Pill className="h-5 w-5 -rotate-45" /></div>
+                  <div><p className="text-lg font-black tracking-[-0.04em]">{nextDose.name}</p><p className="mt-0.5 text-xs font-semibold text-white/60">{nextDose.dosage} · {nextDose.timingInstruction}</p></div>
                 </div>
-                <div className="space-y-1">
-                  <h4 className={`text-sm font-extrabold ${titleText}`}>No Lab Reports Uploaded Yet</h4>
-                  <p className={`text-xs font-medium ${bodyText}`}>
-                    Upload your blood report PDF to monitor and analyze your real clinical biomarkers over time.
-                  </p>
+                <div className="mt-4 flex items-center justify-between gap-3 sm:mt-0 sm:justify-end">
+                  <span className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-[#c5ff7b]"><Clock3 className="mr-1.5 inline h-3.5 w-3.5" />{nextDose.time}</span>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => onLogAction(nextDose.id, 'taken')} className="rounded-xl bg-[#c5ff7b] px-4 py-2.5 text-xs font-black text-[#123d35]">Mark taken</motion.button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('upload')}
-                  className="px-4 py-2 rounded-xl btn-primary-visible text-xs font-extrabold inline-flex items-center space-x-1.5 cursor-pointer shadow-sm"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Upload Blood Report</span>
-                </button>
-              </div>
-            ) : reports.length === 1 ? (
-              /* Single Report: Show key extracted real biomarkers from user's report */
-              <div className="space-y-3 text-xs font-bold">
-                <div className="text-[11px] text-slate-400 font-semibold flex items-center justify-between">
-                  <span>{reports[0].filename}</span>
-                  <span>{reports[0].reportDate}</span>
-                </div>
-                {reports[0].testResults.slice(0, 4).map((t, idx) => (
-                  <div key={idx} className={`p-3 rounded-2xl border flex items-center justify-between ${subCardBg}`}>
-                    <div>
-                      <span className={`block text-[11px] ${labelText}`}>{t.testName}</span>
-                      <span className={`font-extrabold text-sm ${t.isAbnormal ? 'text-amber-500' : 'text-emerald-500'}`}>
-                        {t.value} {t.unit}
-                      </span>
-                    </div>
-                    <span
-                      className={`px-2.5 py-1 rounded-xl text-[10px] border flex items-center ${
-                        t.isAbnormal
-                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/30'
-                          : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/30'
-                      }`}
-                    >
-                      {t.isAbnormal ? '⚠ Out of Range' : '✓ In Range'}
-                    </span>
-                  </div>
-                ))}
-                <p className="text-[10px] text-slate-400 text-center pt-1 font-semibold">
-                  Upload a 2nd report to unlock comparative progress tracking.
-                </p>
               </div>
             ) : (
-              /* 2+ Reports: Show comparative trajectory */
-              (() => {
-                const sorted = [...reports].sort((a, b) => (a.reportDate || '').localeCompare(b.reportDate || ''));
-                const curr = sorted[sorted.length - 1];
-                let prev = sorted[0];
-                for (let i = sorted.length - 2; i >= 0; i--) {
-                  if (sorted[i].testResults.some((t) => findMatch(t.testName, curr.testResults, new Set()))) {
-                    prev = sorted[i];
-                    break;
-                  }
-                }
-                const comp = computeHealthComparison(prev, curr);
-                const shifted = comp.items.filter((i) => i.status === 'improved' || i.status === 'worsened');
-                const displayItems = (shifted.length > 0 ? shifted : comp.items).slice(0, 4);
-
-                return (
-                  <div className="space-y-3.5 text-xs font-bold">
-                    <div className="text-[11px] text-slate-400 font-semibold flex items-center justify-between">
-                      <span>Comparing progression</span>
-                      <span>{prev.reportDate} → {curr.reportDate}</span>
-                    </div>
-                    {displayItems.length === 0 ? (
-                      <p className="text-xs opacity-60">No overlapping biomarkers found between reports.</p>
-                    ) : (
-                      displayItems.map((item, idx) => {
-                        const isImproved = item.status === 'improved';
-                        const isWorsened = item.status === 'worsened';
-                        return (
-                          <div key={idx} className={`p-3.5 rounded-2xl border flex items-center justify-between ${subCardBg}`}>
-                            <div>
-                              <span className={`block text-[11px] ${labelText}`}>{item.testName}</span>
-                              <span className={`font-extrabold text-sm ${isWorsened ? 'text-rose-500' : isImproved ? 'text-emerald-500' : 'text-cyan-500'}`}>
-                                {item.currentValue} {item.unit}
-                              </span>
-                            </div>
-                            {isImproved ? (
-                              <span className="px-2.5 py-1 rounded-xl text-[10px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                                <TrendingUp className="w-3 h-3" /> Improved
-                              </span>
-                            ) : isWorsened ? (
-                              <span className="px-2.5 py-1 rounded-xl text-[10px] bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1">
-                                <TrendingDown className="w-3 h-3" /> Needs Review
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-1 rounded-xl text-[10px] bg-slate-500/15 text-slate-600 dark:text-slate-300 border border-slate-500/30 flex items-center">
-                                ✓ Stable
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                );
-              })()
+              <button onClick={() => setActiveTab('upload')} className="flex w-fit items-center gap-2 rounded-xl bg-[#c5ff7b] px-4 py-3 text-xs font-black text-[#123d35]"><Upload className="h-4 w-4" /> Upload your prescription</button>
             )}
           </div>
+        </motion.section>
 
-          {/* Safety Alert Card (Dynamic to actual user prescriptions) */}
-          {(() => {
-            const rxWithNote = prescriptions.find((p) => p.notes && p.notes.trim().length > 0);
-            const rxWithAmbiguous = prescriptions.find((p) => p.ambiguousCount > 0);
-
-            if (rxWithAmbiguous) {
-              return (
-                <div className={`rounded-3xl p-6 space-y-4 border border-amber-500/30 ${isDark ? 'bg-amber-500/5' : 'bg-amber-50'}`}>
-                  <div className="flex items-center space-x-3">
-                    <ShieldAlert className="w-5 h-5 text-amber-500" />
-                    <h4 className={`text-sm font-extrabold ${titleText}`}>Prescription Verification Alert</h4>
-                  </div>
-                  <p className={`text-xs font-medium ${bodyText}`}>
-                    AI scanned {rxWithAmbiguous.ambiguousCount} medicine entry in <strong className="text-amber-500">{rxWithAmbiguous.filename}</strong> flagged for dosage confirmation.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('reports')}
-                    className="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-600 font-extrabold text-xs border border-amber-500/40 cursor-pointer transition-all"
-                  >
-                    Review Flagged Prescription
-                  </button>
-                </div>
-              );
-            }
-
-            if (rxWithNote) {
-              return (
-                <div className={`rounded-3xl p-6 space-y-4 border border-amber-500/30 ${isDark ? 'bg-amber-500/5' : 'bg-amber-50'}`}>
-                  <div className="flex items-center space-x-3">
-                    <ShieldAlert className="w-5 h-5 text-amber-500" />
-                    <h4 className={`text-sm font-extrabold ${titleText}`}>Doctor Instructions</h4>
-                  </div>
-                  <p className={`text-xs font-medium ${bodyText}`}>
-                    Note from <strong className="text-amber-500">{rxWithNote.filename}</strong>:{' '}
-                    &ldquo;{rxWithNote.notes}&rdquo;
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('reports')}
-                    className="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-600 font-extrabold text-xs border border-amber-500/40 cursor-pointer transition-all"
-                  >
-                    View Prescription Notes
-                  </button>
-                </div>
-              );
-            }
-
-            if (prescriptions.length > 0) {
-              return (
-                <div className={`rounded-3xl p-6 space-y-3 border border-emerald-500/30 ${isDark ? 'bg-emerald-500/5' : 'bg-emerald-50'}`}>
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                    <h4 className={`text-sm font-extrabold ${titleText}`}>Prescriptions Verified</h4>
-                  </div>
-                  <p className={`text-xs font-medium ${bodyText}`}>
-                    All {prescriptions.length} doctor prescription documents verified with high OCR confidence.
-                  </p>
-                </div>
-              );
-            }
-
-            return null;
-          })()}
-
-          {/* Quick Shortcuts */}
-          <div className={`rounded-3xl p-6 space-y-3 border ${cardBg}`}>
-            <h4 className={`text-xs font-extrabold uppercase tracking-wider ${labelText}`}>Quick Navigation</h4>
-
-            <button
-              onClick={() => setActiveTab('calendar')}
-              className={`w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between border cursor-pointer transition-all ${quickNavBg}`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Calendar className={`w-4 h-4 ${iconColor}`} />
-                <span>Monthly Adherence Calendar</span>
-              </div>
-              <ArrowUpRight className={`w-4 h-4 ${labelText}`} />
-            </button>
-
-            <button
-              onClick={() => setActiveTab('reports')}
-              className={`w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between border cursor-pointer transition-all ${quickNavBg}`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <FileText className="w-4 h-4 text-cyan-500" />
-                <span>Stored Prescriptions &amp; Reports</span>
-              </div>
-              <ArrowUpRight className={`w-4 h-4 ${labelText}`} />
-            </button>
+        <motion.section {...motionIn} transition={{ duration: 0.55, delay: 0.12, ease: [0.16, 1, 0.3, 1] }} className={`rounded-[2rem] border p-6 sm:p-7 xl:col-span-5 ${surface}`}>
+          <div className="flex items-start justify-between"><div><p className={`text-[10px] font-black uppercase tracking-[0.16em] ${muted}`}>Daily consistency</p><h2 className="mt-2 text-2xl font-black tracking-[-0.055em]">Your rhythm</h2></div><span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-400/15 text-amber-500"><Flame className="h-5 w-5" /></span></div>
+          <div className="mt-6 flex items-center gap-6">
+            <div className="relative grid h-28 w-28 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(#51e2a8 ${adherence * 3.6}deg, ${isDark ? 'rgba(255,255,255,0.08)' : '#e7eee9'} 0deg)` }}>
+              <div className={`grid h-20 w-20 place-items-center rounded-full ${isDark ? 'bg-[#09251f]' : 'bg-white'}`}><span className="text-2xl font-black tracking-[-0.06em]">{adherence}%</span></div>
+            </div>
+            <div><p className="text-3xl font-black tracking-[-0.06em]">{takenIds.size}<span className={`ml-1 text-base font-bold ${muted}`}>/ {activeSchedules.length}</span></p><p className={`mt-1 text-xs font-semibold ${muted}`}>doses complete today</p><div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-400/15 px-2.5 py-1 text-[10px] font-black text-amber-600"><Flame className="h-3 w-3" /> {streak || 'Start'} day {streak === 1 ? 'streak' : 'streak'}</div></div>
           </div>
-
-        </div>
-
+          <div className={`mt-6 border-t pt-4 ${isDark ? 'border-white/8' : 'border-slate-100'}`}><button onClick={() => setActiveTab('calendar')} className={`flex w-full items-center justify-between text-xs font-black ${isDark ? 'text-white/70 hover:text-white' : 'text-[#123d35]'}`}>See your monthly rhythm <ArrowUpRight className="h-4 w-4 text-emerald-500" /></button></div>
+        </motion.section>
       </div>
 
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <motion.section {...motionIn} transition={{ duration: 0.55, delay: 0.16, ease: [0.16, 1, 0.3, 1] }} className={`rounded-[2rem] border p-5 sm:p-7 xl:col-span-8 ${surface}`}>
+          <div className="flex items-start justify-between gap-3"><div><p className={`text-[10px] font-black uppercase tracking-[0.16em] ${muted}`}>Your day, at a glance</p><h2 className="mt-2 text-2xl font-black tracking-[-0.055em]">Dose timeline</h2></div><button onClick={() => setActiveTab('schedule')} className={`flex items-center gap-1 text-xs font-black ${isDark ? 'text-[#c5ff7b]' : 'text-emerald-600'}`}>Full schedule <ChevronRight className="h-4 w-4" /></button></div>
+          <div className="mt-6 space-y-2">
+            {activeSchedules.length === 0 ? (
+              <button onClick={() => setActiveTab('upload')} className={`group flex w-full items-center justify-between rounded-2xl border border-dashed p-5 text-left transition-colors ${subduedSurface} ${isDark ? 'hover:border-[#c5ff7b]/40' : 'hover:border-emerald-300'}`}><span><span className="block text-sm font-black">No doses in your timeline yet</span><span className={`mt-1 block text-xs font-medium ${muted}`}>Add a prescription and MedTrack will build the schedule for you.</span></span><span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/10 text-emerald-500"><Plus className="h-5 w-5" /></span></button>
+            ) : activeSchedules.map((item, index) => {
+              const log = todayLogs.find((entry) => entry.scheduleId === item.id);
+              const isTaken = log?.status === 'taken';
+              const isIgnored = log?.status === 'ignored';
+              return (
+                <motion.div layout key={item.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.22 + index * 0.04 }} className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${isTaken ? (isDark ? 'border-emerald-400/25 bg-emerald-400/10' : 'border-emerald-200 bg-emerald-50') : isIgnored ? (isDark ? 'border-rose-300/20 bg-rose-400/10' : 'border-rose-200 bg-rose-50') : subduedSurface}`}>
+                  <div className="flex items-center gap-4"><span className={`min-w-16 rounded-xl px-2 py-2 text-center text-[11px] font-black ${isDark ? 'bg-black/20 text-[#c5ff7b]' : 'bg-white text-emerald-700 shadow-sm'}`}>{item.time}</span><div><p className="text-sm font-black">{item.name}</p><p className={`mt-0.5 text-xs font-medium ${muted}`}>{item.dosage} · {item.timingInstruction}</p></div></div>
+                  {isTaken ? <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[10px] font-black text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" /> Taken {log?.timestamp && `at ${log.timestamp}`}</span> : isIgnored ? <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-rose-500/15 px-3 py-1.5 text-[10px] font-black text-rose-600"><X className="h-3.5 w-3.5" /> Skipped</span> : <div className="flex gap-2"><button onClick={() => onLogAction(item.id, 'taken')} className="rounded-xl bg-[#123d35] px-3 py-2 text-[10px] font-black text-white"><Check className="mr-1 inline h-3.5 w-3.5 text-[#c5ff7b]" /> Taken</button><button onClick={() => onLogAction(item.id, 'ignored')} className={`rounded-xl border px-3 py-2 text-[10px] font-black ${isDark ? 'border-white/10 text-white/70' : 'border-slate-200 text-slate-500'}`}>Skip</button></div>}
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.section>
+
+        <motion.aside {...motionIn} transition={{ duration: 0.55, delay: 0.22, ease: [0.16, 1, 0.3, 1] }} className="space-y-5 xl:col-span-4">
+          <section className="relative overflow-hidden rounded-[2rem] bg-[#c5ff7b] p-6 text-[#123d35]">
+            <div aria-hidden="true" className="absolute -right-12 -top-12 h-40 w-40 rounded-full border-[20px] border-[#123d35]/10" />
+            <div className="relative"><p className="text-[10px] font-black uppercase tracking-[0.16em] opacity-60">Health records</p><h2 className="mt-2 max-w-[15rem] text-3xl font-black leading-[0.95] tracking-[-0.06em]">Your data has a story.</h2>
+              <div className="mt-7 flex items-end justify-between"><div><p className="text-4xl font-black tracking-[-0.07em]">{reports.length}</p><p className="mt-1 text-xs font-bold opacity-70">lab report{reports.length === 1 ? '' : 's'} in one view</p></div><button onClick={() => setActiveTab(reports.length >= 2 ? 'comparison' : 'reports')} className="grid h-11 w-11 place-items-center rounded-2xl bg-[#123d35] text-[#c5ff7b]"><ArrowUpRight className="h-5 w-5" /></button></div>
+            </div>
+          </section>
+
+          <section className={`rounded-[2rem] border p-6 ${surface}`}><div className="flex items-center justify-between"><div><p className={`text-[10px] font-black uppercase tracking-[0.16em] ${muted}`}>Latest signal</p><h3 className="mt-2 text-lg font-black tracking-[-0.045em]">{latestReport ? latestReport.labName || 'Lab report' : 'Nothing to review yet'}</h3></div><span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-500/10 text-indigo-500"><TrendingUp className="h-5 w-5" /></span></div>
+            {latestReport ? <><p className={`mt-3 text-xs font-medium ${muted}`}>{latestReport.reportDate} · {latestReport.testResults.length} markers scanned</p><div className={`mt-4 rounded-2xl border p-3 ${subduedSurface}`}><p className="text-xs font-black">{abnormalCount ? `${abnormalCount} item${abnormalCount === 1 ? '' : 's'} worth reviewing` : 'Everything looks in range'}</p><p className={`mt-1 text-[11px] font-medium ${muted}`}>{abnormalCount ? 'Open your report to see the flagged biomarkers.' : 'Keep tracking to spot changes over time.'}</p></div></> : <><p className={`mt-3 text-xs font-medium ${muted}`}>Upload a report and turn clinical results into a clear progress story.</p><button onClick={() => setActiveTab('upload')} className="mt-4 inline-flex items-center gap-1.5 text-xs font-black text-emerald-600">Upload report <ArrowUpRight className="h-3.5 w-3.5" /></button></>}
+          </section>
+
+          <section className={`rounded-[2rem] border p-6 ${surface}`}><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-cyan-500/10 text-cyan-600"><FileText className="h-5 w-5" /></span><div><p className={`text-[10px] font-black uppercase tracking-[0.16em] ${muted}`}>Medication library</p><p className="mt-1 text-sm font-black">{prescriptions.length} active prescription{prescriptions.length === 1 ? '' : 's'}</p></div></div><button onClick={() => setActiveTab('reports')} className={`mt-4 flex w-full items-center justify-between border-t pt-4 text-xs font-black ${isDark ? 'border-white/8 text-white/70' : 'border-slate-100 text-[#123d35]'}`}>View your records <ArrowUpRight className="h-4 w-4 text-emerald-500" /></button></section>
+        </motion.aside>
+      </div>
     </div>
   );
 };

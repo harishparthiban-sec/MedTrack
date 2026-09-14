@@ -5,6 +5,102 @@
   :root {
     --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-width: 320px;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+.app-ambient {
+  position: fixed;
+  z-index: 0;
+  width: 42rem;
+  height: 42rem;
+  border-radius: 9999px;
+  pointer-events: none;
+  filter: blur(64px);
+  opacity: 0.28;
+}
+
+.app-ambient-one {
+  top: -19rem;
+  right: -14rem;
+  background: #34d399;
+  animation: ambient-drift 16s ease-in-out infinite alternate;
+}
+
+.app-ambient-two {
+  bottom: -22rem;
+  left: -18rem;
+  background: #38bdf8;
+  opacity: 0.12;
+  animation: ambient-drift 19s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes ambient-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-3rem, 2rem, 0) scale(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+.auth-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,0.55) 0.7px, transparent 0.7px);
+  background-size: 5px 5px;
+  mask-image: linear-gradient(to right, black, transparent 73%);
+}
+
+.auth-shell .auth-form h1,
+.auth-shell .auth-form h2,
+.auth-shell .auth-form h3,
+.auth-shell .auth-form h4,
+.auth-shell .auth-form p,
+.auth-shell .auth-form label {
+  color: inherit !important;
+}
+
+.auth-shell .auth-input {
+  color: #123d35 !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.auth-shell .auth-input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.auth-shell .auth-input:focus {
+  border-color: #2fb988 !important;
+  box-shadow: 0 0 0 4px rgba(47, 185, 136, 0.13);
 }
 
 /* =========================================================
@@ -19,6 +115,9 @@ html.dark body {
   background-color: #041a14 !important;
   color: #f8fafc !important;
 }
+
+html.dark .app-ambient-one { opacity: 0.18; }
+html.dark .app-ambient-two { opacity: 0.08; }
 
 html.dark h1,
 html.dark h2,
@@ -73,6 +172,9 @@ html.light body {
   background-color: #f8fafc !important;
   color: #0f172a !important;
 }
+
+html.light .app-ambient-one { opacity: 0.18; }
+html.light .app-ambient-two { opacity: 0.1; }
 
 html.light .navbar-clean {
   background: #ffffff !important;
@@ -202,18 +304,19 @@ html.light select[style] option {
    3. HYPER-VISIBLE BUTTONS
    ========================================================= */
 .btn-primary-visible {
+  background-image: linear-gradient(135deg, #10b981, #0d9488) !important;
   background-color: #059669 !important;
   color: #ffffff !important;
   font-weight: 800 !important;
-  border: 1.5px solid #34d399 !important;
-  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.4) !important;
-  transition: all 0.15s ease !important;
+  border: 1.5px solid rgba(167, 243, 208, 0.6) !important;
+  box-shadow: 0 9px 24px rgba(5, 150, 105, 0.25) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease !important;
 }
 
 .btn-primary-visible:hover {
-  background-color: #047857 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 8px 22px rgba(5, 150, 105, 0.5) !important;
+  filter: brightness(1.05);
+  transform: translateY(-2px) !important;
+  box-shadow: 0 12px 28px rgba(5, 150, 105, 0.34) !important;
 }
 
 .btn-secondary-visible {
@@ -255,4 +358,9 @@ html.light .btn-secondary-visible:hover {
 ::-webkit-scrollbar-thumb {
   background: #059669;
   border-radius: 9999px;
+}
+
+::selection {
+  background: #6ee7b7;
+  color: #022c22;
 }
