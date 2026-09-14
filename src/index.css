@@ -125,13 +125,32 @@ html.dark h3,
 html.dark h4,
 html.dark h5,
 html.dark h6 {
-  color: #ffffff !important;
-  font-weight: 800 !important;
+  color: #ffffff;
+  font-weight: 800;
 }
 
 html.dark p,
 html.dark label {
-  color: #a7f3d0 !important;
+  color: #a7f3d0;
+}
+
+/* High-contrast dark typography for lime / light background cards */
+.card-lime-theme,
+.card-lime-theme h1,
+.card-lime-theme h2,
+.card-lime-theme h3,
+.card-lime-theme h4,
+.card-lime-theme p,
+.card-lime-theme span,
+.card-lime-theme div,
+.card-lime-theme label {
+  color: #06241c !important;
+}
+
+.card-lime-theme .btn-lime-card,
+.card-lime-theme .btn-lime-card svg {
+  color: #c5ff7b !important;
+  background-color: #09251f !important;
 }
 
 html.dark .navbar-clean {

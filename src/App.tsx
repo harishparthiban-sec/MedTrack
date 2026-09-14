@@ -10,6 +10,7 @@ import { ReportsHistory } from './components/ReportsHistory';
 import { ReminderModal } from './components/ReminderModal';
 import { AuthScreen } from './components/AuthScreen';
 import { AccountModal } from './components/AccountModal';
+import { Bell } from 'lucide-react';
 
 import {
   getStoredUser,
@@ -457,6 +458,40 @@ export function App() {
         onLogout={handleLogout}
         onResetData={handleResetData}
       />
+
+      {/* Persistent Floating Medication Reminders Pill (Always accessible on all pages) */}
+      <motion.button
+        type="button"
+        initial={{ opacity: 0, scale: 0.85 }}
+        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ scale: 1.05, y: -2 }}
+        whileTap={{ scale: 0.94 }}
+        onClick={() => handleTriggerReminder()}
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-gradient-to-r from-[#092e24] to-[#041a14] border-2 border-emerald-500/80 text-white shadow-2xl shadow-emerald-950/60 backdrop-blur-xl cursor-pointer ring-4 ring-emerald-500/10 group pointer-events-auto"
+        title="Open Medication Reminders Pop-up"
+        aria-label="Open Medication Reminders Pop-up"
+      >
+        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-[#092e24] shadow-md shadow-emerald-500/30">
+          <Bell className="w-4 h-4 animate-bounce" />
+          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c5ff7b] opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#c5ff7b]" />
+          </span>
+        </span>
+        <div className="text-left leading-tight hidden sm:block">
+          <span className="block text-xs font-black text-white group-hover:text-[#c5ff7b] transition-colors">
+            Med Reminders
+          </span>
+          <span className="block text-[10px] font-bold text-emerald-300/80">
+            {pendingCount > 0 ? `${pendingCount} dose${pendingCount > 1 ? 's' : ''} pending` : 'Ready to test'}
+          </span>
+        </div>
+        {pendingCount > 0 && (
+          <span className="sm:hidden px-2 py-0.5 rounded-full bg-[#c5ff7b] text-[#092e24] text-[10px] font-black">
+            {pendingCount}
+          </span>
+        )}
+      </motion.button>
 
       {/* Floating Reminder Modal */}
       <ReminderModal

@@ -192,7 +192,24 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      <div className={`lg:hidden flex overflow-x-auto px-4 py-2.5 gap-1.5 border-t scrollbar-none ${isLight ? 'border-slate-200/80 bg-white/65' : 'border-white/5 bg-black/10'}`}>
+      <div className={`lg:hidden flex overflow-x-auto px-4 py-2.5 gap-1.5 border-t scrollbar-none items-center ${isLight ? 'border-slate-200/80 bg-white/65' : 'border-white/5 bg-black/10'}`}>
+        {/* Mobile Alerts Trigger */}
+        <motion.button
+          type="button"
+          onClick={onOpenReminderModal}
+          whileTap={{ scale: 0.95 }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black whitespace-nowrap bg-emerald-500/20 text-[#c5ff7b] border border-emerald-400/50 shadow-sm shadow-emerald-500/20 cursor-pointer shrink-0"
+          title="Open Medication Reminders Pop-up"
+        >
+          <Bell className="w-3.5 h-3.5 animate-bounce text-[#c5ff7b]" />
+          <span>Alerts</span>
+          {pendingCount > 0 && (
+            <span className="w-4 h-4 rounded-full bg-[#c5ff7b] text-[#092e24] text-[9px] leading-4 font-black text-center">
+              {pendingCount}
+            </span>
+          )}
+        </motion.button>
+
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -202,7 +219,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               whileTap={{ scale: 0.96 }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap border transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap border transition-colors cursor-pointer ${
                 isActive
                   ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm shadow-emerald-600/25'
                   : isLight

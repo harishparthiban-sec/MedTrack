@@ -88,15 +88,55 @@ export const Dashboard: React.FC<DashboardProps> = ({
             whileHover={{ y: -2 }}
             whileTap={{ scale: 0.97 }}
             onClick={() => onTriggerReminder?.(nextDose || activeSchedules[0])}
-            className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-3 text-xs font-bold text-emerald-700 dark:text-[#c5ff7b] hover:bg-emerald-500/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 rounded-xl border-2 border-emerald-500/70 bg-emerald-500/20 px-4 py-3 text-xs font-black text-emerald-800 dark:text-[#c5ff7b] hover:bg-emerald-500/30 transition-all cursor-pointer shadow-md shadow-emerald-500/10"
             title="Trigger notification alert pop-up"
           >
-            <Bell className="h-3.5 w-3.5 text-[#c5ff7b] animate-bounce" />
-            <span>Test Pop-up</span>
+            <Bell className="h-4 w-4 text-emerald-600 dark:text-[#c5ff7b] animate-bounce" />
+            <span>🔔 Notification Pop-up</span>
           </motion.button>
           <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => setActiveTab('upload')} className="flex items-center gap-2 rounded-xl bg-[#123d35] px-4 py-3 text-xs font-black text-white shadow-lg shadow-emerald-950/15 cursor-pointer"><Plus className="h-4 w-4 text-[#c5ff7b]" /> Add record</motion.button>
         </div>
       </motion.section>
+
+      {/* Dedicated Medication Notification & Pop-up Trigger Banner */}
+      <motion.div
+        {...motionIn}
+        transition={{ duration: 0.5, delay: 0.04, ease: [0.16, 1, 0.3, 1] }}
+        className="rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/5 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-emerald-950/5 backdrop-blur-md"
+      >
+        <div className="flex items-center gap-3.5">
+          <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-[#041a14] shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400/40">
+            <Bell className="w-5 h-5 animate-bounce" />
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c5ff7b] opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-[#c5ff7b]" />
+            </span>
+          </span>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-black tracking-tight">Medication Reminders &amp; Notification Alerts</h3>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-700 dark:text-[#c5ff7b] border border-emerald-500/30">
+                Live &amp; Active
+              </span>
+            </div>
+            <p className={`text-xs mt-0.5 ${muted}`}>
+              Web Audio chimes, voice speech alerts, snooze (10m), and desktop push notifications are ready.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={() => onTriggerReminder?.(nextDose || activeSchedules[0])}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-[#c5ff7b] to-emerald-400 text-[#05231b] font-black text-xs shadow-lg shadow-emerald-500/25 cursor-pointer"
+          >
+            <Bell className="w-4 h-4" />
+            <span>Open Notification Pop-up</span>
+          </motion.button>
+        </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <motion.section {...motionIn} transition={{ duration: 0.55, delay: 0.06, ease: [0.16, 1, 0.3, 1] }} className="relative overflow-hidden rounded-[2rem] bg-[#123d35] p-6 text-white sm:p-8 xl:col-span-7">
@@ -164,10 +204,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </motion.section>
 
         <motion.aside {...motionIn} transition={{ duration: 0.55, delay: 0.22, ease: [0.16, 1, 0.3, 1] }} className="space-y-5 xl:col-span-4">
-          <section className="relative overflow-hidden rounded-[2rem] bg-[#c5ff7b] p-6 text-[#123d35]">
-            <div aria-hidden="true" className="absolute -right-12 -top-12 h-40 w-40 rounded-full border-[20px] border-[#123d35]/10" />
-            <div className="relative"><p className="text-[10px] font-black uppercase tracking-[0.16em] opacity-60">Health records</p><h2 className="mt-2 max-w-[15rem] text-3xl font-black leading-[0.95] tracking-[-0.06em]">Your data has a story.</h2>
-              <div className="mt-7 flex items-end justify-between"><div><p className="text-4xl font-black tracking-[-0.07em]">{reports.length}</p><p className="mt-1 text-xs font-bold opacity-70">lab report{reports.length === 1 ? '' : 's'} in one view</p></div><button onClick={() => setActiveTab(reports.length >= 2 ? 'comparison' : 'reports')} className="grid h-11 w-11 place-items-center rounded-2xl bg-[#123d35] text-[#c5ff7b]"><ArrowUpRight className="h-5 w-5" /></button></div>
+          <section className="relative overflow-hidden rounded-[2rem] bg-[#c5ff7b] p-6 text-[#06241c] card-lime-theme shadow-lg shadow-emerald-950/10">
+            <div aria-hidden="true" className="absolute -right-12 -top-12 h-40 w-40 rounded-full border-[20px] border-[#06241c]/10" />
+            <div className="relative">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#06241c]/75">Health records</p>
+              <h2 className="mt-2 max-w-[15rem] text-3xl font-black leading-[0.95] tracking-[-0.06em] text-[#06241c]">
+                Your data has a story.
+              </h2>
+              <div className="mt-7 flex items-end justify-between">
+                <div>
+                  <p className="text-4xl font-black tracking-[-0.07em] text-[#06241c]">{reports.length}</p>
+                  <p className="mt-1 text-xs font-bold text-[#06241c]/80">lab report{reports.length === 1 ? '' : 's'} in one view</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(reports.length >= 2 ? 'comparison' : 'reports')}
+                  className="btn-lime-card grid h-11 w-11 place-items-center rounded-2xl bg-[#06241c] text-[#c5ff7b] hover:scale-105 transition-transform cursor-pointer"
+                  title="View reports"
+                >
+                  <ArrowUpRight className="h-5 w-5" />
+                </button>
+              </div>
             </div>
           </section>
 
