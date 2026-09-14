@@ -136,14 +136,16 @@ html.dark label {
 
 /* High-contrast dark typography for lime / light background cards */
 .card-lime-theme,
-.card-lime-theme h1,
-.card-lime-theme h2,
-.card-lime-theme h3,
-.card-lime-theme h4,
-.card-lime-theme p,
-.card-lime-theme span,
-.card-lime-theme div,
-.card-lime-theme label {
+.card-lime-theme *,
+html.dark .card-lime-theme,
+html.dark .card-lime-theme h1,
+html.dark .card-lime-theme h2,
+html.dark .card-lime-theme h3,
+html.dark .card-lime-theme h4,
+html.dark .card-lime-theme p,
+html.dark .card-lime-theme span,
+html.dark .card-lime-theme div,
+html.dark .card-lime-theme label {
   color: #06241c !important;
 }
 

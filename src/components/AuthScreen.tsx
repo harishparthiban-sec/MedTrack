@@ -99,9 +99,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
               </div>
               <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: '68%' }} transition={{ duration: 1.1, delay: 0.7 }} className="h-full rounded-full bg-[#c5ff7b]" /></div>
             </div>
-            <div className="rounded-2xl bg-[#c5ff7b] p-4 text-[#082e28]">
-              <p className="text-[10px] font-black uppercase tracking-[0.15em] opacity-60">Made for you</p>
-              <p className="mt-4 text-xl font-black leading-none tracking-[-0.06em]">One place.<br />Full picture.</p>
+            <div
+              className="card-lime-theme rounded-2xl bg-[#c5ff7b] p-4 text-[#082e28]"
+              style={{ color: '#082e28' }}
+            >
+              <p
+                className="text-[10px] font-black uppercase tracking-[0.15em]"
+                style={{ color: '#082e28', opacity: 0.75 }}
+              >
+                Made for you
+              </p>
+              <p
+                className="mt-4 text-xl font-black leading-none tracking-[-0.06em]"
+                style={{ color: '#082e28' }}
+              >
+                One place.<br />Full picture.
+              </p>
             </div>
           </motion.div>
         </div>
