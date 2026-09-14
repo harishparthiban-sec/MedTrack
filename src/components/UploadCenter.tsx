@@ -517,16 +517,52 @@ Vitamin D (25-OH): 22.4 ng/mL (30.0 - 100.0) Low`;
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Medicine</span>
               </button>
-              <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40">
-                💊 {parsedRx.medicines.length} Medicines Extracted
+              <span className={`px-3 py-1 rounded-full text-xs font-extrabold border ${
+                parsedRx.medicines.length > 0
+                  ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/40'
+                  : 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40'
+              }`}>
+                {parsedRx.medicines.length > 0 ? `💊 ${parsedRx.medicines.length} Medicines Extracted` : '⚠️ 0 Detected (Handwritten)'}
               </span>
             </div>
           </div>
 
           <div className="space-y-3">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider">
-              Verify & Edit Extracted Medicines ({parsedRx.medicines.length}):
-            </h4>
+            {parsedRx.medicines.length === 0 ? (
+              <div className="p-6 rounded-2xl border-2 border-amber-500/30 bg-amber-500/10 text-slate-800 dark:text-amber-100 space-y-3">
+                <div className="flex items-center gap-2.5 font-black text-sm text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                  <span>No Medicines Recognized from this Prescription</span>
+                </div>
+                <p className="text-xs opacity-90 leading-relaxed">
+                  Doctor handwriting can vary greatly in clarity, style, and ink contrast. To maintain 100% patient safety, we never insert fake demo medications (like Zerodol-P or Amoxicillin). You can add your prescribed medicines manually using the button below, or try re-uploading a clearer, well-lit photo.
+                </p>
+                <div className="pt-2 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleAddCustomMedicine}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-2 cursor-pointer shadow-md transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Add Medicine Manually</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setParsedRx(null);
+                      setCustomText('');
+                    }}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-white/50 dark:bg-white/5 text-xs font-black cursor-pointer hover:bg-white/80 transition-all"
+                  >
+                    Upload Another Photo
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <h4 className="text-xs font-extrabold uppercase tracking-wider">
+                Verify & Edit Extracted Medicines ({parsedRx.medicines.length}):
+              </h4>
+            )}
 
             {parsedRx.medicines.map((med, idx) => (
               <div

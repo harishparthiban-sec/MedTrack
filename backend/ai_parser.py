@@ -50,11 +50,12 @@ def parse_prescription_text(text: str, filename: str = "Prescription.pdf") -> Pa
             
             # Strength
             strength_match = re.search(r'(\d+\s*(?:mg|ml|mcg|iu|g))', line, re.IGNORECASE)
-            strength = strength_match.group(1) if strength_match else "500 mg"
+            bare_number_match = re.search(r'\b(650|625|500|400|375|250|200|150|120|100|75|50|40|25|20|10|5)\b', line)
+            strength = strength_match.group(1) if strength_match else f"{bare_number_match.group(1)} mg" if bare_number_match else "500 mg"
             
             # Dose
             dose_match = re.search(r'(\d+\s*(?:tablet|cap|puff|spoon|ml|tab)s?)', line, re.IGNORECASE)
-            dose = dose_match.group(1) if dose_match else "1 tablet"
+            dose = dose_match.group(1) if dose_match else ("1 capsule" if "cap" in lower_line else "1 tablet")
 
             # Frequency
             frequency = "Once daily"
@@ -72,12 +73,12 @@ def parse_prescription_text(text: str, filename: str = "Prescription.pdf") -> Pa
 
             # Duration
             duration_match = re.search(r'(\d+)\s*(?:days|day|wk|weeks|month)', line, re.IGNORECASE)
-            duration_days = int(duration_match.group(1)) if duration_match else 7
+            duration_days = int(duration_match.group(1)) if duration_match else 5
 
             needs_review = False
             review_reason = None
 
-            if not strength_match or len(med_name) < 3:
+            if not strength_match and not bare_number_match or len(med_name) < 3:
                 needs_review = True
                 review_reason = "Dosage or medicine name unclear. Please confirm."
                 ambiguous_count += 1
@@ -96,42 +97,9 @@ def parse_prescription_text(text: str, filename: str = "Prescription.pdf") -> Pa
                 )
             )
 
-    # Fallback if no specific lines matched
-    if not extracted_medicines:
-        extracted_medicines = [
-            ExtractedMedicine(
-                name="Paracetamol",
-                strength="500 mg",
-                dose="1 tablet",
-                frequency="Twice daily",
-                timing="After food",
-                duration_days=5,
-                confidence=0.95,
-                needs_review=False
-            ),
-            ExtractedMedicine(
-                name="Vitamin D3",
-                strength="60000 IU",
-                dose="1 capsule",
-                frequency="Once weekly",
-                timing="After food",
-                duration_days=30,
-                confidence=0.90,
-                needs_review=False
-            ),
-            ExtractedMedicine(
-                name="Amoxicillin",
-                strength="500 mg",
-                dose="1 capsule",
-                frequency="Three times daily",
-                timing="After food",
-                duration_days=7,
-                confidence=0.70,
-                needs_review=True,
-                review_reason="Verify frequency with prescription image."
-            )
-        ]
-        ambiguous_count = 1
+    # NOTE: Never inject fake demo medicines (Zerodol-P, Amoxicillin, etc.) when unreadable!
+    # Return exactly what was parsed or empty list so medical records stay accurate.
+    ambiguous_count = len([m for m in extracted_medicines if m.needs_review])
 
     return ParsePrescriptionResponse(
         document_name=filename,
@@ -139,7 +107,7 @@ def parse_prescription_text(text: str, filename: str = "Prescription.pdf") -> Pa
         date="2026-08-20",
         medicines=extracted_medicines,
         ambiguous_count=ambiguous_count,
-        notes="Prescription successfully parsed with AI OCR engine. Please review flagged items."
+        notes=f"Prescription OCR identified {len(extracted_medicines)} medicine(s)." if extracted_medicines else "No readable medicine entries could be identified from this document."
     )
 
 

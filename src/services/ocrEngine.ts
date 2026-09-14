@@ -9,16 +9,110 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Preprocesses prescription images (especially handwritten doctor notes)
+ * using an off-screen HTML5 Canvas. Applies grayscale, upscale for cursive text,
+ * and adaptive contrast stretching to make pen strokes crisp black and paper bright white.
+ */
+export const preprocessImageForHandwriting = async (fileOrBlob: Blob | File): Promise<Blob> => {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      resolve(fileOrBlob);
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(fileOrBlob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      try {
+        let width = img.width;
+        let height = img.height;
+        // Upscale small or phone images to improve OCR character loop resolution
+        const scale = width < 1200 ? Math.min(2.5, 1800 / width) : 1;
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(fileOrBlob);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const imgData = ctx.getImageData(0, 0, width, height);
+        const data = imgData.data;
+
+        // Grayscale conversion and find min/max luminance for contrast normalization
+        let minLum = 255;
+        let maxLum = 0;
+        const grayValues = new Uint8ClampedArray(width * height);
+
+        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const gray = (r * 77 + g * 150 + b * 29) >> 8;
+          grayValues[j] = gray;
+          if (gray < minLum) minLum = gray;
+          if (gray > maxLum) maxLum = gray;
+        }
+
+        const range = Math.max(maxLum - minLum, 1);
+
+        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+          const g = grayValues[j];
+          // Stretched contrast: darken pen ink, brighten background paper shadows
+          const stretched = Math.round(((g - minLum) / range) * 255);
+          const finalVal = stretched < 140 ? Math.max(0, stretched - 45) : Math.min(255, stretched + 35);
+          data[i] = finalVal;
+          data[i + 1] = finalVal;
+          data[i + 2] = finalVal;
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+        canvas.toBlob((blob) => {
+          resolve(blob || fileOrBlob);
+        }, 'image/png');
+      } catch (e) {
+        console.warn('Preprocessing handwriting image failed, using original', e);
+        resolve(fileOrBlob);
+      }
+    };
+    img.onerror = () => resolve(fileOrBlob);
+    img.src = url;
+  });
+};
+
+/**
  * In-browser Image Optical Character Recognition (OCR) using Tesseract.js
- * Extracts raw text from scanned photos, screenshots, PNG, JPG, and WEBP documents.
+ * Enhanced with adaptive contrast preprocessing for handwritten prescriptions.
  */
 export const recognizeImageText = async (fileOrBlob: Blob | File): Promise<string> => {
   try {
     const { createWorker } = await import('tesseract.js');
     const worker = await createWorker('eng');
-    const ret = await worker.recognize(fileOrBlob);
+
+    // Run on handwriting-enhanced preprocessed image first
+    let processedBlob = fileOrBlob;
+    if (typeof window !== 'undefined' && (fileOrBlob.type.startsWith('image/') || fileOrBlob instanceof File)) {
+      processedBlob = await preprocessImageForHandwriting(fileOrBlob);
+    }
+
+    let ret = await worker.recognize(processedBlob);
+    let text = ret.data.text || '';
+
+    // If enhanced output yielded very little text, try raw original image as fallback
+    if (text.trim().length < 15 && processedBlob !== fileOrBlob) {
+      const fallbackRet = await worker.recognize(fileOrBlob);
+      if ((fallbackRet.data.text || '').trim().length > text.trim().length) {
+        text = fallbackRet.data.text || '';
+      }
+    }
+
     await worker.terminate();
-    return ret.data.text || '';
+    return text;
   } catch (err) {
     console.error('Tesseract OCR recognition error:', err);
     return '';
@@ -181,7 +275,188 @@ export const parsePrescriptionClient = async (
     doctorName = 'Dr. ' + docMatch[1].replace(/^(dr\.|doctor)\s*/i, '').trim();
   }
 
-  // 2. Universal Pattern Extractor: Matches any "[DrugName] [Strength] [Frequency/Duration/Instructions]"
+  // 2. Comprehensive Clinical Medicine Lexicon for Handwritten Prescriptions
+  const CLINICAL_LEXICON: Array<{ name: string; standardStrength?: string; defaultDose?: string }> = [
+    { name: 'Paracetamol', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Dolo', standardStrength: '650mg', defaultDose: '1 tablet' },
+    { name: 'Crocin', standardStrength: '650mg', defaultDose: '1 tablet' },
+    { name: 'Calpol', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Augmentin', standardStrength: '625mg', defaultDose: '1 tablet' },
+    { name: 'Amoxicillin', standardStrength: '500mg', defaultDose: '1 capsule' },
+    { name: 'Azithromycin', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Azithral', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Azee', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Cefixime', standardStrength: '200mg', defaultDose: '1 tablet' },
+    { name: 'Zifi', standardStrength: '200mg', defaultDose: '1 tablet' },
+    { name: 'Taxim-O', standardStrength: '200mg', defaultDose: '1 tablet' },
+    { name: 'Cefpodoxime', standardStrength: '200mg', defaultDose: '1 tablet' },
+    { name: 'Ciprofloxacin', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Ciplox', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Cifran', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Levofloxacin', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Ofloxacin', standardStrength: '200mg', defaultDose: '1 tablet' },
+    { name: 'Doxycycline', standardStrength: '100mg', defaultDose: '1 capsule' },
+    { name: 'Metronidazole', standardStrength: '400mg', defaultDose: '1 tablet' },
+    { name: 'Flagyl', standardStrength: '400mg', defaultDose: '1 tablet' },
+    { name: 'Pantoprazole', standardStrength: '40mg', defaultDose: '1 tablet' },
+    { name: 'Pantocid', standardStrength: '40mg', defaultDose: '1 tablet' },
+    { name: 'Pan', standardStrength: '40mg', defaultDose: '1 tablet' },
+    { name: 'Pan-D', standardStrength: '40mg', defaultDose: '1 capsule' },
+    { name: 'Pantosec', standardStrength: '40mg', defaultDose: '1 tablet' },
+    { name: 'Omeprazole', standardStrength: '20mg', defaultDose: '1 capsule' },
+    { name: 'Omez', standardStrength: '20mg', defaultDose: '1 capsule' },
+    { name: 'Rabeprazole', standardStrength: '20mg', defaultDose: '1 tablet' },
+    { name: 'Razo', standardStrength: '20mg', defaultDose: '1 tablet' },
+    { name: 'Happi', standardStrength: '20mg', defaultDose: '1 tablet' },
+    { name: 'Esomeprazole', standardStrength: '40mg', defaultDose: '1 tablet' },
+    { name: 'Nexpro', standardStrength: '40mg', defaultDose: '1 tablet' },
+    { name: 'Ranitidine', standardStrength: '150mg', defaultDose: '1 tablet' },
+    { name: 'Rantac', standardStrength: '150mg', defaultDose: '1 tablet' },
+    { name: 'Aciloc', standardStrength: '150mg', defaultDose: '1 tablet' },
+    { name: 'Famotidine', standardStrength: '20mg', defaultDose: '1 tablet' },
+    { name: 'Ondansetron', standardStrength: '4mg', defaultDose: '1 tablet' },
+    { name: 'Emeset', standardStrength: '4mg', defaultDose: '1 tablet' },
+    { name: 'Domperidone', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Cetirizine', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Cetzine', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Alerid', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Levocetirizine', standardStrength: '5mg', defaultDose: '1 tablet' },
+    { name: 'Levocet', standardStrength: '5mg', defaultDose: '1 tablet' },
+    { name: 'Montelukast', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Montair', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Montair-LC', standardStrength: '10mg/5mg', defaultDose: '1 tablet' },
+    { name: 'Montek-LC', standardStrength: '10mg/5mg', defaultDose: '1 tablet' },
+    { name: 'Montek', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Allegra', standardStrength: '120mg', defaultDose: '1 tablet' },
+    { name: 'Fexofenadine', standardStrength: '120mg', defaultDose: '1 tablet' },
+    { name: 'Bilastine', standardStrength: '20mg', defaultDose: '1 tablet' },
+    { name: 'Sinarest', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Cheston Cold', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Ascoril', standardStrength: '10ml', defaultDose: '1 spoon (10ml)' },
+    { name: 'Benadryl', standardStrength: '10ml', defaultDose: '1 spoon (10ml)' },
+    { name: 'Corex', standardStrength: '5ml', defaultDose: '1 spoon (5ml)' },
+    { name: 'Grilinctus', standardStrength: '10ml', defaultDose: '1 spoon (10ml)' },
+    { name: 'Ibuprofen', standardStrength: '400mg', defaultDose: '1 tablet' },
+    { name: 'Combiflam', standardStrength: '400mg/325mg', defaultDose: '1 tablet' },
+    { name: 'Brufen', standardStrength: '400mg', defaultDose: '1 tablet' },
+    { name: 'Diclofenac', standardStrength: '50mg', defaultDose: '1 tablet' },
+    { name: 'Voveran', standardStrength: '50mg', defaultDose: '1 tablet' },
+    { name: 'Aceclofenac', standardStrength: '100mg', defaultDose: '1 tablet' },
+    { name: 'Zerodol', standardStrength: '100mg', defaultDose: '1 tablet' },
+    { name: 'Zerodol-P', standardStrength: '100mg/325mg', defaultDose: '1 tablet' },
+    { name: 'Zerodol-SP', standardStrength: '100mg/325mg/15mg', defaultDose: '1 tablet' },
+    { name: 'Hifenac', standardStrength: '100mg', defaultDose: '1 tablet' },
+    { name: 'Hifenac-P', standardStrength: '100mg/325mg', defaultDose: '1 tablet' },
+    { name: 'Tramadol', standardStrength: '50mg', defaultDose: '1 tablet' },
+    { name: 'Ultracet', standardStrength: '37.5mg/325mg', defaultDose: '1 tablet' },
+    { name: 'Mefenamic Acid', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Meftal', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Meftal-Spas', standardStrength: '500mg/20mg', defaultDose: '1 tablet' },
+    { name: 'Telmisartan', standardStrength: '40mg', defaultDose: '1 tablet' },
+    { name: 'Telma', standardStrength: '40mg', defaultDose: '1 tablet' },
+    { name: 'Telma-H', standardStrength: '40mg/12.5mg', defaultDose: '1 tablet' },
+    { name: 'Telmikind', standardStrength: '40mg', defaultDose: '1 tablet' },
+    { name: 'Amlodipine', standardStrength: '5mg', defaultDose: '1 tablet' },
+    { name: 'Amlong', standardStrength: '5mg', defaultDose: '1 tablet' },
+    { name: 'Stamlo', standardStrength: '5mg', defaultDose: '1 tablet' },
+    { name: 'Metoprolol', standardStrength: '25mg', defaultDose: '1 tablet' },
+    { name: 'Metolar', standardStrength: '25mg', defaultDose: '1 tablet' },
+    { name: 'Atenolol', standardStrength: '50mg', defaultDose: '1 tablet' },
+    { name: 'Nebivolol', standardStrength: '5mg', defaultDose: '1 tablet' },
+    { name: 'Metformin', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Glycomet', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Glimepiride', standardStrength: '1mg', defaultDose: '1 tablet' },
+    { name: 'Amaryl', standardStrength: '1mg', defaultDose: '1 tablet' },
+    { name: 'Vildagliptin', standardStrength: '50mg', defaultDose: '1 tablet' },
+    { name: 'Galvus', standardStrength: '50mg', defaultDose: '1 tablet' },
+    { name: 'Sitagliptin', standardStrength: '50mg', defaultDose: '1 tablet' },
+    { name: 'Januvia', standardStrength: '50mg', defaultDose: '1 tablet' },
+    { name: 'Dapagliflozin', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Forxiga', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Atorvastatin', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Atorlip', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Lipitor', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Rosuvastatin', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Rosuvas', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Vitamin D3', standardStrength: '60000 IU', defaultDose: '1 capsule' },
+    { name: 'Calcirol', standardStrength: '60000 IU', defaultDose: '1 sachet / capsule' },
+    { name: 'Uprise-D3', standardStrength: '60000 IU', defaultDose: '1 capsule' },
+    { name: 'Calcium', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Shelcal', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Shelcal-500', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Cipcal', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Becosules', standardStrength: '1 capsule', defaultDose: '1 capsule' },
+    { name: 'Neurobion', standardStrength: '1 tablet', defaultDose: '1 tablet' },
+    { name: 'Neurobion Forte', standardStrength: '1 tablet', defaultDose: '1 tablet' },
+    { name: 'Zincovit', standardStrength: '1 tablet', defaultDose: '1 tablet' },
+    { name: 'Limcee', standardStrength: '500mg', defaultDose: '1 chewable tablet' },
+    { name: 'Celin', standardStrength: '500mg', defaultDose: '1 tablet' },
+    { name: 'Aspirin', standardStrength: '75mg', defaultDose: '1 tablet' },
+    { name: 'Ecosprin', standardStrength: '75mg', defaultDose: '1 tablet' },
+    { name: 'Disprin', standardStrength: '350mg', defaultDose: '1 tablet' },
+    { name: 'Clonazepam', standardStrength: '0.5mg', defaultDose: '1 tablet' },
+    { name: 'Alprazolam', standardStrength: '0.25mg', defaultDose: '1 tablet' },
+    { name: 'Escitalopram', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Nexito', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Dulcoflex', standardStrength: '5mg', defaultDose: '1 tablet' },
+    { name: 'Prednisolone', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Omnacortil', standardStrength: '10mg', defaultDose: '1 tablet' },
+    { name: 'Deflazacort', standardStrength: '6mg', defaultDose: '1 tablet' },
+    { name: 'Asthalin', standardStrength: '2mg', defaultDose: '1 tablet / puff' },
+    { name: 'Budesonide', standardStrength: '200mcg', defaultDose: '1 puff' },
+  ];
+
+  function fuzzyFindMedicine(token: string): { name: string; standardStrength?: string; defaultDose?: string } | null {
+    const clean = token.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (clean.length < 3) return null;
+
+    // Exact match
+    const exact = CLINICAL_LEXICON.find((m) => m.name.toLowerCase().replace(/[^a-z0-9]/g, '') === clean);
+    if (exact) return exact;
+
+    // Substring match (e.g. "Dolo650" starts with "dolo", "Pantocid40" starts with "pantocid")
+    const prefixMatch = CLINICAL_LEXICON.find((m) => {
+      const mClean = m.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return clean.startsWith(mClean) || mClean.startsWith(clean);
+    });
+    if (prefixMatch && Math.abs(prefixMatch.name.length - clean.length) <= 3) {
+      return prefixMatch;
+    }
+
+    // Levenshtein distance match for messy handwriting OCR
+    let bestMatch: { name: string; standardStrength?: string; defaultDose?: string } | null = null;
+    let minDistance = 99;
+
+    for (const m of CLINICAL_LEXICON) {
+      const mClean = m.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (Math.abs(mClean.length - clean.length) > 2) continue;
+
+      const d = levenshteinDistance(clean, mClean);
+      if (d < minDistance && d <= (mClean.length <= 4 ? 1 : 2)) {
+        minDistance = d;
+        bestMatch = m;
+      }
+    }
+
+    return bestMatch;
+  }
+
+  function levenshteinDistance(s1: string, s2: string): number {
+    const m = s1.length;
+    const n = s2.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      }
+    }
+    return dp[m][n];
+  }
+
+  // 3. Structured Pattern Extractor: Matches "[DrugName] [Strength] [Frequency/Duration/Instructions]"
   const rowPattern = /([A-Za-z0-9\-+]{2,30})\s+(\d+(?:\.\d+)?\s*(?:mg|ml|mcg|iu|k\s*iu|g))\s+([\s\S]*?)(?=(?:[A-Za-z0-9\-+]{2,30}\s+\d+(?:\.\d+)?\s*(?:mg|ml|mcg|iu|k\s*iu|g))|Dr\.|Signature|PATIENT|DIAGNOSIS|$)/gi;
   
   let rowMatch;
@@ -253,114 +528,117 @@ export const parsePrescriptionClient = async (
     });
   }
 
-  // 3. Line-by-line fallback if rowPattern missed any standalone line items
-  if (extractedMedicines.length === 0) {
-    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      const strengthMatch = line.match(/(\d+(?:\.\d+)?\s*(?:mg|ml|mcg|iu|k\s*iu|g))/i);
-      if (!strengthMatch) continue;
+  // 4. Line-by-Line & Handwritten Shorthand Parser
+  // Handles doctor handwriting notes like: "Dolo 650 1-0-1 x 5d", "Tab Pantocid 40 1-0-0 bbf", "Augmentin 625 BD pc"
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  for (const rawLine of lines) {
+    // Strip leading list numbering (e.g. "1.", "2)", "-", "•", "Rx")
+    let line = rawLine.replace(/^(?:\d+[\.\)\-:]|\*|•|\-|rx[:\.]?)\s*/i, '').trim();
+    if (line.length < 3) continue;
 
-      const strength = strengthMatch[1];
-      const namePart = line.split(strength)[0].replace(/^\d+[\.\)\-]\s*/, '').replace(/^(tab|cap|syr|tablet|capsule|rx)\.?\s+/i, '').trim();
-      const restPart = line.split(strength)[1] ? line.split(strength)[1].toLowerCase() : '';
+    // Detect dose form prefix
+    let doseForm = '1 tablet';
+    if (/^(?:cap|capsule)\.?\s+/i.test(line)) {
+      doseForm = '1 capsule';
+      line = line.replace(/^(?:cap|capsule)\.?\s+/i, '');
+    } else if (/^(?:tab|tablet)\.?\s+/i.test(line)) {
+      doseForm = '1 tablet';
+      line = line.replace(/^(?:tab|tablet)\.?\s+/i, '');
+    } else if (/^(?:syr|syrup)\.?\s+/i.test(line)) {
+      doseForm = '1 spoon (10ml)';
+      line = line.replace(/^(?:syr|syrup)\.?\s+/i, '');
+    } else if (/^(?:inj|injection)\.?\s+/i.test(line)) {
+      doseForm = '1 injection';
+      line = line.replace(/^(?:inj|injection)\.?\s+/i, '');
+    }
 
-      if (namePart.length < 2 || ignoreListIncludes(namePart)) continue;
+    const tokens = line.split(/\s+/);
+    if (tokens.length === 0) continue;
 
-      const cleanName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-      if (addedNames.has(cleanName.toLowerCase())) continue;
-      addedNames.add(cleanName.toLowerCase());
+    const firstWord = tokens[0].replace(/[^a-zA-Z0-9\-]/g, '');
+    if (ignoreListIncludes(firstWord) || firstWord.length < 2) continue;
 
-      let frequency = 'Once daily';
-      for (const [key, val] of Object.entries(freqMap)) {
-        if (restPart.includes(key)) {
-          frequency = val;
-          break;
-        }
-      }
+    // Check if this token matches a clinical medication or doctor handwriting token
+    const matchedLexicon = fuzzyFindMedicine(firstWord) || (tokens[1] ? fuzzyFindMedicine(firstWord + ' ' + tokens[1]) : null);
+    
+    // Check for explicit strength or bare dosage numbers (e.g. 650, 500, 625, 40, 20)
+    const explicitStrength = line.match(/(\d+(?:\.\d+)?\s*(?:mg|ml|mcg|iu|g))/i);
+    const bareNumber = line.match(/\b(650|625|500|400|375|250|200|150|120|100|75|50|40|25|20|10|5|2\.5|1\.25|0\.5)\b/);
+    
+    let strength = explicitStrength ? explicitStrength[1] : bareNumber ? `${bareNumber[1]}mg` : matchedLexicon?.standardStrength || '500mg';
 
-      let timing = 'After food';
-      for (const [key, val] of Object.entries(timingMap)) {
-        if (restPart.includes(key)) {
-          timing = val;
-          break;
-        }
-      }
+    // Check for frequency shorthand (1-0-1, OD, BD, TDS, etc.)
+    const lowerLine = line.toLowerCase();
+    let frequency = 'Once daily';
+    if (/\b(?:1-0-1|1\s*0\s*1|1\.0\.1|1\/0\/1|bd|bid|twice\s*daily)\b/i.test(lowerLine)) {
+      frequency = 'Twice daily';
+    } else if (/\b(?:1-1-1|1\s*1\s*1|1\.1\.1|1\/1\/1|tds|tid|thrice|three\s*times)\b/i.test(lowerLine)) {
+      frequency = 'Three times daily';
+    } else if (/\b(?:0-0-1|0\s*0\s*1|hs|bedtime|night|at\s*night)\b/i.test(lowerLine)) {
+      frequency = 'Once daily (Night)';
+    } else if (/\b(?:1-0-0|1\s*0\s*0|morning|od|once\s*daily)\b/i.test(lowerLine)) {
+      frequency = 'Once daily (Morning)';
+    } else if (/\b(?:sos|prn|as\s*needed)\b/i.test(lowerLine)) {
+      frequency = 'As needed (SOS)';
+    } else if (/\b(?:stat)\b/i.test(lowerLine)) {
+      frequency = 'Immediate (Single dose)';
+    }
 
-      const durationMatch = restPart.match(/(\d+)\s*(?:days?|d|weeks?|wks?|months?)/i);
-      const durationDays = durationMatch ? parseInt(durationMatch[1], 10) : 5;
+    // Check for timing shorthand (AC, PC, BBF, etc.)
+    let timing = 'After food';
+    if (/\b(?:bbf|before\s*breakfast|30\s*min\s*before)\b/i.test(lowerLine)) {
+      timing = 'Take 30 min before breakfast';
+    } else if (/\b(?:ac|before\s*food|before\s*meals|empty\s*stomach)\b/i.test(lowerLine)) {
+      timing = 'Before food';
+    } else if (/\b(?:pc|after\s*food|after\s*meals)\b/i.test(lowerLine)) {
+      timing = 'After food';
+    }
+
+    // Check for duration (e.g. x 5 days, 5d, 7 days)
+    const durationMatch = lowerLine.match(/(?:x\s*|for\s*)?(\d+)\s*(?:days?|d|weeks?|wks?|months?)/i);
+    let durationDays = 5;
+    if (durationMatch) {
+      const num = parseInt(durationMatch[1], 10);
+      durationDays = lowerLine.includes('week') || lowerLine.includes('wk') ? num * 7 : lowerLine.includes('month') ? num * 30 : num;
+    }
+
+    let detectedName = matchedLexicon ? matchedLexicon.name : firstWord.charAt(0).toUpperCase() + firstWord.slice(1);
+    if (addedNames.has(detectedName.toLowerCase())) continue;
+
+    // Accept if: matched known clinical drug OR has explicit strength / frequency pattern
+    const hasDosagePattern = Boolean(explicitStrength || bareNumber || frequency !== 'Once daily' || durationMatch);
+    if (matchedLexicon || hasDosagePattern) {
+      addedNames.add(detectedName.toLowerCase());
+      const needsReview = !matchedLexicon && !explicitStrength;
 
       extractedMedicines.push({
         id: 'med-' + Math.random().toString(36).substr(2, 6),
-        name: cleanName === 'Paracetomol' ? 'Paracetamol' : cleanName,
+        name: detectedName,
         strength,
-        dose: cleanName.toLowerCase().includes('amoxicillin') ? '1 capsule' : '1 tablet',
+        dose: matchedLexicon?.defaultDose || doseForm,
         frequency,
         timing,
         duration_days: durationDays,
-        confidence: 0.95,
-        needs_review: false,
+        confidence: matchedLexicon ? 0.94 : 0.75,
+        needs_review: needsReview,
+        review_reason: needsReview ? 'Handwritten item detected — please verify name and dosage.' : undefined,
       });
     }
   }
 
-  // Complete Prescription dataset matching uploaded doctor prescription
-  if (extractedMedicines.length === 0) {
-    extractedMedicines.push(
-      {
-        id: 'med-1',
-        name: 'Omeprazole',
-        strength: '20mg',
-        dose: '1 tablet',
-        frequency: 'Once daily (Morning)',
-        timing: 'Take 30 min before breakfast',
-        duration_days: 5,
-        confidence: 0.99,
-        needs_review: false,
-      },
-      {
-        id: 'med-2',
-        name: 'Amoxicillin',
-        strength: '500mg',
-        dose: '1 capsule',
-        frequency: 'Once daily (Morning)',
-        timing: 'After food',
-        duration_days: 5,
-        confidence: 0.99,
-        needs_review: false,
-      },
-      {
-        id: 'med-3',
-        name: 'Zerodol-P',
-        strength: '500mg',
-        dose: '1 tablet',
-        frequency: 'Once daily (Morning)',
-        timing: 'After food',
-        duration_days: 5,
-        confidence: 0.99,
-        needs_review: false,
-      },
-      {
-        id: 'med-4',
-        name: 'Aspirin',
-        strength: '250mg',
-        dose: '1 tablet',
-        frequency: 'Twice daily',
-        timing: 'After food',
-        duration_days: 3,
-        confidence: 0.99,
-        needs_review: false,
-      }
-    );
-  }
-
+  // NOTE: If extractedMedicines is empty, we DO NOT inject fake demo data (like Zerodol-P or Amoxicillin)!
+  // Medical records must accurately reflect what was actually read from the patient's prescription.
   const ambiguousCount = extractedMedicines.filter((m) => m.needs_review).length;
+  const notes = extractedMedicines.length > 0
+    ? `Prescription OCR identified ${extractedMedicines.length} medicine instruction(s).`
+    : 'No readable medication entries could be automatically identified from this image. Please check image clarity or add your medicines manually.';
 
   return {
     doctorName,
     date: new Date().toISOString().split('T')[0],
     medicines: extractedMedicines,
     ambiguousCount,
-    notes: `Prescription OCR extracted all ${extractedMedicines.length} medicine instruction(s).`,
+    notes,
   };
 };
 
