@@ -121,7 +121,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               whileHover={{ scale: 1.05 }}
               className={`relative w-9 h-9 rounded-xl flex items-center justify-center border transition-all cursor-pointer ${
                 pendingCount > 0
-                  ? 'bg-emerald-500/20 text-[#c5ff7b] border-emerald-400/50 shadow-sm shadow-emerald-500/20'
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-700 border-emerald-300 shadow-sm shadow-emerald-100'
+                    : 'bg-emerald-500/20 text-[#c5ff7b] border-emerald-400/50 shadow-sm shadow-emerald-500/20'
                   : isLight
                   ? 'bg-slate-100/80 text-slate-600 border-slate-200 hover:bg-slate-200'
                   : 'bg-white/5 text-emerald-200 border-white/10 hover:bg-white/10'
@@ -129,9 +131,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               title={pendingCount > 0 ? `${pendingCount} dose reminder${pendingCount > 1 ? 's' : ''} pending` : 'Medication Reminders'}
               aria-label="Medication Reminders"
             >
-              <Bell className={`w-4 h-4 ${pendingCount > 0 ? 'text-[#c5ff7b] animate-bounce' : ''}`} />
+              <Bell className={`w-4 h-4 ${pendingCount > 0 ? (isLight ? 'text-emerald-600 animate-bounce' : 'text-[#c5ff7b] animate-bounce') : ''}`} />
               {pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-[#c5ff7b] text-[#092e24] text-[9px] font-black leading-none shadow-sm">
+                <span className={`absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[9px] font-black leading-none shadow-sm ${
+                  isLight ? 'bg-emerald-600 text-white' : 'bg-[#c5ff7b] text-[#092e24]'
+                }`}>
                   {pendingCount}
                 </span>
               )}
@@ -198,13 +202,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           type="button"
           onClick={onOpenReminderModal}
           whileTap={{ scale: 0.95 }}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black whitespace-nowrap bg-emerald-500/20 text-[#c5ff7b] border border-emerald-400/50 shadow-sm shadow-emerald-500/20 cursor-pointer shrink-0"
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black whitespace-nowrap border shadow-sm cursor-pointer shrink-0 transition-colors ${
+            isLight
+              ? 'bg-emerald-100 text-emerald-800 border-emerald-300 shadow-emerald-100'
+              : 'bg-emerald-500/20 text-[#c5ff7b] border-emerald-400/50 shadow-emerald-500/20'
+          }`}
           title="Open Medication Reminders Pop-up"
         >
-          <Bell className="w-3.5 h-3.5 animate-bounce text-[#c5ff7b]" />
+          <Bell className={`w-3.5 h-3.5 animate-bounce ${isLight ? 'text-emerald-600' : 'text-[#c5ff7b]'}`} />
           <span>Alerts</span>
           {pendingCount > 0 && (
-            <span className="w-4 h-4 rounded-full bg-[#c5ff7b] text-[#092e24] text-[9px] leading-4 font-black text-center">
+            <span className={`w-4 h-4 rounded-full text-[9px] leading-4 font-black text-center ${
+              isLight ? 'bg-emerald-600 text-white' : 'bg-[#c5ff7b] text-[#092e24]'
+            }`}>
               {pendingCount}
             </span>
           )}

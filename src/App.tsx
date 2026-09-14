@@ -467,27 +467,31 @@ export function App() {
         whileHover={{ scale: 1.05, y: -2 }}
         whileTap={{ scale: 0.94 }}
         onClick={() => handleTriggerReminder()}
-        className="fixed bottom-6 left-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-gradient-to-r from-[#092e24] to-[#041a14] border-2 border-emerald-500/80 text-white shadow-2xl shadow-emerald-950/60 backdrop-blur-xl cursor-pointer ring-4 ring-emerald-500/10 group pointer-events-auto"
+        className={`fixed bottom-6 left-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-2xl border-2 shadow-2xl backdrop-blur-xl cursor-pointer ring-4 ring-emerald-500/10 group pointer-events-auto transition-colors ${
+          theme === 'light'
+            ? 'bg-white border-emerald-500 text-emerald-900 shadow-emerald-200 ring-emerald-100'
+            : 'bg-gradient-to-r from-[#092e24] to-[#041a14] border-emerald-500/80 text-white shadow-emerald-950/60'
+        }`}
         title="Open Medication Reminders Pop-up"
         aria-label="Open Medication Reminders Pop-up"
       >
-        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-[#092e24] shadow-md shadow-emerald-500/30">
+        <span className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-md shadow-emerald-500/30 ${theme === 'light' ? 'bg-emerald-500 text-white' : 'bg-emerald-500 text-[#092e24]'}`}>
           <Bell className="w-4 h-4 animate-bounce" />
           <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c5ff7b] opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#c5ff7b]" />
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${theme === 'light' ? 'bg-emerald-500' : 'bg-[#c5ff7b]'}`} />
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${theme === 'light' ? 'bg-emerald-500' : 'bg-[#c5ff7b]'}`} />
           </span>
         </span>
         <div className="text-left leading-tight hidden sm:block">
-          <span className="block text-xs font-black text-white group-hover:text-[#c5ff7b] transition-colors">
+          <span className={`block text-xs font-black transition-colors ${theme === 'light' ? 'text-emerald-900 group-hover:text-emerald-600' : 'text-white group-hover:text-[#c5ff7b]'}`}>
             Med Reminders
           </span>
-          <span className="block text-[10px] font-bold text-emerald-300/80">
+          <span className={`block text-[10px] font-bold ${theme === 'light' ? 'text-emerald-600/80' : 'text-emerald-300/80'}`}>
             {pendingCount > 0 ? `${pendingCount} dose${pendingCount > 1 ? 's' : ''} pending` : 'Ready to test'}
           </span>
         </div>
         {pendingCount > 0 && (
-          <span className="sm:hidden px-2 py-0.5 rounded-full bg-[#c5ff7b] text-[#092e24] text-[10px] font-black">
+          <span className={`sm:hidden px-2 py-0.5 rounded-full text-[10px] font-black ${theme === 'light' ? 'bg-emerald-600 text-white' : 'bg-[#c5ff7b] text-[#092e24]'}`}>
             {pendingCount}
           </span>
         )}
@@ -500,6 +504,7 @@ export function App() {
         onClose={handleDismissReminder}
         onLogAction={handleLogAction}
         onSnooze={handleSnoozeReminder}
+        theme={theme}
       />
 
       {/* Subtle Minimal Footer */}

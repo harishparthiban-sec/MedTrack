@@ -221,13 +221,13 @@ html.light h3,
 html.light h4,
 html.light h5,
 html.light h6 {
-  color: #0f172a !important;
-  font-weight: 800 !important;
+  color: #0f172a;
+  font-weight: 800;
 }
 
 html.light p,
 html.light label {
-  color: #334155 !important;
+  color: #334155;
 }
 
 /* Automatic light mode overrides for hardcoded dark classes */
@@ -267,11 +267,14 @@ html.light .text-slate-500 {
   color: #64748b !important;
 }
 
-html.light .text-white {
-  color: #0f172a !important;
+/* Light mode button contrast */
+html.light .card-lime-theme .btn-lime-card,
+html.light .card-lime-theme .btn-lime-card svg {
+  color: #064e3b !important;
+  background-color: #ffffff !important;
 }
 
-/* Exceptions: Elements that should retain white text in light mode */
+/* Elements that retain white text in light mode */
 html.light .btn-primary-visible,
 html.light .btn-primary-visible *,
 html.light .btn-danger-visible,
@@ -280,9 +283,33 @@ html.light .bg-emerald-500,
 html.light .bg-emerald-500 *,
 html.light .bg-emerald-600,
 html.light .bg-emerald-600 *,
+html.light .bg-emerald-700,
+html.light .bg-emerald-700 *,
 html.light .bg-rose-500,
-html.light .bg-rose-500 * {
+html.light .bg-rose-500 *,
+html.light .bg-rose-600,
+html.light .bg-rose-600 * {
   color: #ffffff !important;
+}
+
+/* =========================================================
+   HERO CARE PLAN — light mode forced overrides
+   ========================================================= */
+html.light .hero-care-plan {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06) !important;
+}
+
+html.light .hero-care-plan h2,
+html.light .hero-care-plan h3,
+html.light .hero-care-plan h4 {
+  color: #0f172a !important;
+}
+
+html.light .hero-care-plan p {
+  color: #334155 !important;
 }
 
 /* Dark mode Hero banner text */

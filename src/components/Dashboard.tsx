@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowUpRight,
@@ -53,7 +53,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onTriggerReminder,
   theme,
 }) => {
-  const isDark = theme === 'dark';
+  const isDark = theme !== 'light';
+
+  // Direct DOM manipulation — bypasses ALL CSS/Tailwind/framer-motion overrides
+  const heroCardRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = heroCardRef.current;
+    if (!el) return;
+    if (isDark) {
+      el.style.background = '#123d35';
+      el.style.color = '#ffffff';
+    } else {
+      el.style.background = '#ffffff';
+      el.style.color = '#0f172a';
+    }
+  }, [isDark]);
+
   const today = new Date().toISOString().split('T')[0];
   const activeSchedules = schedules.filter((item) => item.active);
   const todayLogs = adherenceLogs.filter((item) => item.date === today);
@@ -94,7 +109,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <Bell className="h-4 w-4 text-emerald-600 dark:text-[#c5ff7b] animate-bounce" />
             <span>🔔 Notification Pop-up</span>
           </motion.button>
-          <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => setActiveTab('upload')} className="flex items-center gap-2 rounded-xl bg-[#123d35] px-4 py-3 text-xs font-black text-white shadow-lg shadow-emerald-950/15 cursor-pointer"><Plus className="h-4 w-4 text-[#c5ff7b]" /> Add record</motion.button>
+          <motion.button
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setActiveTab('upload')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-black shadow-lg cursor-pointer transition-all ${
+              isDark
+                ? 'bg-[#123d35] text-white hover:bg-[#184e44] shadow-emerald-950/20'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20'
+            }`}
+          >
+            <Plus className={`h-4 w-4 ${isDark ? 'text-[#c5ff7b]' : 'text-white'}`} /> Add record
+          </motion.button>
         </div>
       </motion.section>
 
@@ -105,11 +131,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
         className="rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/5 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-emerald-950/5 backdrop-blur-md"
       >
         <div className="flex items-center gap-3.5">
-          <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-[#041a14] shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400/40">
+          <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400/40">
             <Bell className="w-5 h-5 animate-bounce" />
             <span className="absolute -top-1 -right-1 flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c5ff7b] opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-[#c5ff7b]" />
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isDark ? 'bg-[#c5ff7b]' : 'bg-emerald-500'}`} />
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${isDark ? 'bg-[#c5ff7b]' : 'bg-emerald-500'}`} />
             </span>
           </span>
           <div>
@@ -130,7 +156,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.96 }}
             onClick={() => onTriggerReminder?.(nextDose || activeSchedules[0])}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-[#c5ff7b] to-emerald-400 text-[#05231b] font-black text-xs shadow-lg shadow-emerald-500/25 cursor-pointer"
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-black text-xs shadow-lg cursor-pointer transition-all ${
+              isDark
+                ? 'bg-gradient-to-r from-[#c5ff7b] to-emerald-400 text-[#05231b] shadow-emerald-500/25'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+            }`}
           >
             <Bell className="w-4 h-4" />
             <span>Open Notification Pop-up</span>
@@ -139,34 +169,158 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </motion.div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <motion.section {...motionIn} transition={{ duration: 0.55, delay: 0.06, ease: [0.16, 1, 0.3, 1] }} className="relative overflow-hidden rounded-[2rem] bg-[#123d35] p-6 text-white sm:p-8 xl:col-span-7">
-          <div aria-hidden="true" className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-[#c5ff7b]/20 blur-3xl" />
-          <div aria-hidden="true" className="absolute -bottom-36 right-20 h-64 w-64 rounded-full bg-cyan-300/15 blur-3xl" />
+        <motion.section
+          ref={heroCardRef as React.Ref<HTMLElement>}
+          {...motionIn}
+          transition={{ duration: 0.55, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
+          className="hero-care-plan relative overflow-hidden rounded-[2rem] p-6 sm:p-8 xl:col-span-7 border"
+          style={isDark
+            ? { background: '#123d35', color: '#fff', borderColor: 'rgba(52,211,153,0.2)', boxShadow: '0 25px 60px -12px rgba(0,0,0,0.5)' }
+            : { background: '#ffffff', color: '#0f172a', borderColor: '#e2e8f0', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }
+          }
+        >
+          {/* Subtle bg orb — light mode is very faint */}
+          <div
+            aria-hidden="true"
+            className="absolute -right-16 -top-24 h-72 w-72 rounded-full blur-3xl pointer-events-none"
+            style={{ background: isDark ? 'rgba(197,255,123,0.12)' : 'rgba(16,185,129,0.06)' }}
+          />
+
           <div className="relative flex h-full flex-col justify-between gap-9">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#c5ff7b]"><Sparkles className="h-3.5 w-3.5" /> Today&apos;s care plan</p>
-                <h2 className="mt-3 max-w-lg text-3xl font-black leading-[0.96] tracking-[-0.06em] sm:text-4xl">
-                  {nextDose ? <>Your next dose is <span className="text-[#c5ff7b]">ready when you are.</span></> : activeSchedules.length ? <>You&apos;re all <span className="text-[#c5ff7b]">caught up.</span></> : <>Start a plan that <span className="text-[#c5ff7b]">works for you.</span></>}
+                {/* Label */}
+                <p
+                  className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]"
+                  style={{ color: isDark ? '#c5ff7b' : '#059669' }}
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Today&apos;s care plan
+                </p>
+
+                {/* Heading */}
+                <h2
+                  className="mt-3 max-w-lg text-3xl font-black leading-[0.96] tracking-[-0.06em] sm:text-4xl"
+                  style={{ color: isDark ? '#ffffff' : '#0f172a' }}
+                >
+                  {nextDose ? (
+                    <>
+                      Your next dose is{' '}
+                      <span style={{ color: isDark ? '#c5ff7b' : '#059669' }}>
+                        ready when you are.
+                      </span>
+                    </>
+                  ) : activeSchedules.length ? (
+                    <>
+                      You&apos;re all{' '}
+                      <span style={{ color: isDark ? '#c5ff7b' : '#059669' }}>
+                        caught up.
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Start a plan that{' '}
+                      <span style={{ color: isDark ? '#c5ff7b' : '#059669' }}>
+                        works for you.
+                      </span>
+                    </>
+                  )}
                 </h2>
               </div>
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/10 text-[#c5ff7b]"><HeartPulse className="h-6 w-6" /></div>
+
+              {/* Icon badge */}
+              <div
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border"
+                style={isDark
+                  ? { borderColor: 'rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.1)', color: '#c5ff7b' }
+                  : { borderColor: '#bbf7d0', background: '#f0fdf4', color: '#059669' }
+                }
+              >
+                <HeartPulse className="h-6 w-6" />
+              </div>
             </div>
 
+            {/* Next dose card OR upload button */}
             {nextDose ? (
-              <div className="rounded-2xl border border-white/10 bg-black/15 p-4 backdrop-blur-md sm:flex sm:items-center sm:justify-between sm:p-5">
+              <div
+                className="rounded-2xl border p-4 sm:p-5 sm:flex sm:items-center sm:justify-between"
+                style={isDark
+                  ? { borderColor: 'rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.18)', color: '#fff' }
+                  : { borderColor: '#e2e8f0', background: '#f8fafc', color: '#0f172a' }
+                }
+              >
                 <div className="flex items-center gap-4">
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c5ff7b] text-[#123d35]"><Pill className="h-5 w-5 -rotate-45" /></div>
-                  <div><p className="text-lg font-black tracking-[-0.04em]">{nextDose.name}</p><p className="mt-0.5 text-xs font-semibold text-white/60">{nextDose.dosage} · {nextDose.timingInstruction}</p></div>
+                  <div
+                    className="grid h-12 w-12 place-items-center rounded-2xl"
+                    style={isDark
+                      ? { background: '#c5ff7b', color: '#123d35' }
+                      : { background: '#10b981', color: '#fff', boxShadow: '0 4px 12px rgba(16,185,129,0.25)' }
+                    }
+                  >
+                    <Pill className="h-5 w-5 -rotate-45" />
+                  </div>
+                  <div>
+                    <p
+                      className="text-base font-black tracking-tight"
+                      style={{ color: isDark ? '#fff' : '#0f172a' }}
+                    >
+                      {nextDose.name}
+                    </p>
+                    <p
+                      className="mt-0.5 text-xs font-medium"
+                      style={{ color: isDark ? 'rgba(255,255,255,0.55)' : '#64748b' }}
+                    >
+                      {nextDose.dosage} · {nextDose.timingInstruction}
+                    </p>
+                  </div>
                 </div>
+
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2.5 sm:mt-0 sm:justify-end">
-                  <span className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-[#c5ff7b]"><Clock3 className="mr-1.5 inline h-3.5 w-3.5" />{nextDose.time}</span>
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => onTriggerReminder?.(nextDose)} className="rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-2 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer" title="Preview notification pop-up for this dose"><Bell className="h-3.5 w-3.5 text-[#c5ff7b]" /> Pop-up</motion.button>
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => onLogAction(nextDose.id, 'taken')} className="rounded-xl bg-[#c5ff7b] px-4 py-2 text-xs font-black text-[#123d35] cursor-pointer">Mark taken</motion.button>
+                  <span
+                    className="rounded-xl px-3 py-2 text-xs font-black"
+                    style={isDark
+                      ? { background: 'rgba(255,255,255,0.1)', color: '#c5ff7b' }
+                      : { background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0' }
+                    }
+                  >
+                    <Clock3 className="mr-1.5 inline h-3.5 w-3.5" />
+                    {nextDose.time}
+                  </span>
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => onTriggerReminder?.(nextDose)}
+                    className="rounded-xl border px-3 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    style={isDark
+                      ? { borderColor: 'rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff' }
+                      : { borderColor: '#e2e8f0', background: '#fff', color: '#334155' }
+                    }
+                    title="Preview notification pop-up for this dose"
+                  >
+                    <Bell className="h-3.5 w-3.5" style={{ color: isDark ? '#c5ff7b' : '#059669' }} /> Pop-up
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => onLogAction(nextDose.id, 'taken')}
+                    className="rounded-xl px-4 py-2 text-xs font-black cursor-pointer"
+                    style={isDark
+                      ? { background: '#c5ff7b', color: '#123d35' }
+                      : { background: '#0f172a', color: '#fff' }
+                    }
+                  >
+                    Mark taken
+                  </motion.button>
                 </div>
               </div>
             ) : (
-              <button onClick={() => setActiveTab('upload')} className="flex w-fit items-center gap-2 rounded-xl bg-[#c5ff7b] px-4 py-3 text-xs font-black text-[#123d35]"><Upload className="h-4 w-4" /> Upload your prescription</button>
+              <button
+                onClick={() => setActiveTab('upload')}
+                className="flex w-fit items-center gap-2 rounded-xl px-4 py-3 text-xs font-black cursor-pointer"
+                style={isDark
+                  ? { background: '#c5ff7b', color: '#123d35' }
+                  : { background: '#059669', color: '#fff' }
+                }
+              >
+                <Upload className="h-4 w-4" /> Upload your prescription
+              </button>
             )}
           </div>
         </motion.section>
@@ -196,7 +350,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
               return (
                 <motion.div layout key={item.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.22 + index * 0.04 }} className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${isTaken ? (isDark ? 'border-emerald-400/25 bg-emerald-400/10' : 'border-emerald-200 bg-emerald-50') : isIgnored ? (isDark ? 'border-rose-300/20 bg-rose-400/10' : 'border-rose-200 bg-rose-50') : subduedSurface}`}>
                   <div className="flex items-center gap-4"><span className={`min-w-16 rounded-xl px-2 py-2 text-center text-[11px] font-black ${isDark ? 'bg-black/20 text-[#c5ff7b]' : 'bg-white text-emerald-700 shadow-sm'}`}>{item.time}</span><div><p className="text-sm font-black">{item.name}</p><p className={`mt-0.5 text-xs font-medium ${muted}`}>{item.dosage} · {item.timingInstruction}</p></div></div>
-                  {isTaken ? <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[10px] font-black text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" /> Taken {log?.timestamp && `at ${log.timestamp}`}</span> : isIgnored ? <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-rose-500/15 px-3 py-1.5 text-[10px] font-black text-rose-600"><X className="h-3.5 w-3.5" /> Skipped</span> : <div className="flex gap-2"><button onClick={() => onLogAction(item.id, 'taken')} className="rounded-xl bg-[#123d35] px-3 py-2 text-[10px] font-black text-white"><Check className="mr-1 inline h-3.5 w-3.5 text-[#c5ff7b]" /> Taken</button><button onClick={() => onLogAction(item.id, 'ignored')} className={`rounded-xl border px-3 py-2 text-[10px] font-black ${isDark ? 'border-white/10 text-white/70' : 'border-slate-200 text-slate-500'}`}>Skip</button></div>}
+                  {isTaken ? (
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[10px] font-black text-emerald-600">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Taken {log?.timestamp && `at ${log.timestamp}`}
+                    </span>
+                  ) : isIgnored ? (
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-rose-500/15 px-3 py-1.5 text-[10px] font-black text-rose-600">
+                      <X className="h-3.5 w-3.5" /> Skipped
+                    </span>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => onLogAction(item.id, 'taken')}
+                        className={`rounded-xl px-3 py-2 text-[10px] font-black cursor-pointer transition-all ${
+                          isDark
+                            ? 'bg-[#123d35] hover:bg-[#184e44] text-white'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20'
+                        }`}
+                      >
+                        <Check className={`mr-1 inline h-3.5 w-3.5 ${isDark ? 'text-[#c5ff7b]' : 'text-white'}`} /> Taken
+                      </button>
+                      <button
+                        onClick={() => onLogAction(item.id, 'ignored')}
+                        className={`rounded-xl border px-3 py-2 text-[10px] font-black cursor-pointer transition-colors ${
+                          isDark
+                            ? 'border-white/10 text-white/70 hover:bg-white/5'
+                            : 'border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        Skip
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               );
             })}
@@ -219,7 +404,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab(reports.length >= 2 ? 'comparison' : 'reports')}
-                  className="btn-lime-card grid h-11 w-11 place-items-center rounded-2xl bg-[#06241c] text-[#c5ff7b] hover:scale-105 transition-transform cursor-pointer"
+                  className={`btn-lime-card grid h-11 w-11 place-items-center rounded-2xl hover:scale-105 transition-transform cursor-pointer shadow-md ${
+                    isDark
+                      ? 'bg-[#06241c] text-[#c5ff7b]'
+                      : 'bg-white text-emerald-800 hover:bg-emerald-50'
+                  }`}
                   title="View reports"
                 >
                   <ArrowUpRight className="h-5 w-5" />

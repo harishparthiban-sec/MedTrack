@@ -30,6 +30,7 @@ interface ReminderModalProps {
   onClose: () => void;
   onLogAction: (scheduleId: string, status: 'taken' | 'ignored') => void;
   onSnooze?: (scheduleId: string, minutes: number) => void;
+  theme?: 'dark' | 'light';
 }
 
 export const ReminderModal: React.FC<ReminderModalProps> = ({
@@ -38,7 +39,9 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
   onClose,
   onLogAction,
   onSnooze,
+  theme,
 }) => {
+  const isDark = theme ? theme === 'dark' : document.documentElement.classList.contains('dark');
   // If a list of due items is provided, support cycling through them
   const activeList = itemsQueue.length > 0 ? itemsQueue : item ? [item] : [];
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -112,29 +115,53 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
         role="alertdialog"
         aria-live="assertive"
       >
-        <div className="relative overflow-hidden rounded-[1.75rem] border-2 border-emerald-500/70 bg-gradient-to-b from-[#092e24] to-[#041a14] text-white p-5 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.55),0_0_40px_rgba(16,185,129,0.25)] backdrop-blur-2xl">
+        <div className={`relative overflow-hidden rounded-[1.75rem] border-2 p-5 sm:p-6 backdrop-blur-2xl transition-colors ${
+          isDark
+            ? 'border-emerald-500/70 bg-gradient-to-b from-[#092e24] to-[#041a14] text-white shadow-[0_20px_60px_rgba(0,0,0,0.55),0_0_40px_rgba(16,185,129,0.25)]'
+            : 'border-emerald-500/40 bg-gradient-to-b from-white via-emerald-50/70 to-emerald-50 text-slate-900 shadow-[0_20px_60px_rgba(16,185,129,0.18),0_4px_24px_rgba(0,0,0,0.08)]'
+        }`}>
           
           {/* Ambient Lighting Accents */}
-          <div aria-hidden="true" className="absolute -top-16 -right-16 w-36 h-36 rounded-full bg-emerald-400/25 blur-2xl pointer-events-none" />
-          <div aria-hidden="true" className="absolute -bottom-16 -left-16 w-36 h-36 rounded-full bg-cyan-400/20 blur-2xl pointer-events-none" />
+          <div
+            aria-hidden="true"
+            className={`absolute -top-16 -right-16 w-36 h-36 rounded-full blur-2xl pointer-events-none ${
+              isDark ? 'bg-emerald-400/25' : 'bg-emerald-300/30'
+            }`}
+          />
+          <div
+            aria-hidden="true"
+            className={`absolute -bottom-16 -left-16 w-36 h-36 rounded-full blur-2xl pointer-events-none ${
+              isDark ? 'bg-cyan-400/20' : 'bg-teal-200/30'
+            }`}
+          />
 
           {/* Header Row */}
-          <div className="relative flex items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
+          <div className={`relative flex items-center justify-between gap-3 pb-3 border-b ${
+            isDark ? 'border-emerald-500/20' : 'border-slate-200'
+          }`}>
             <div className="flex items-center gap-2.5">
-              <span className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-400/20 text-[#c5ff7b] ring-1 ring-emerald-400/40">
+              <span className={`relative flex h-8 w-8 items-center justify-center rounded-xl ring-1 ${
+                isDark
+                  ? 'bg-emerald-400/20 text-[#c5ff7b] ring-emerald-400/40'
+                  : 'bg-emerald-100 text-emerald-700 ring-emerald-300'
+              }`}>
                 <Bell className="w-4 h-4 animate-bounce" />
                 <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c5ff7b] opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#c5ff7b]" />
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isDark ? 'bg-[#c5ff7b]' : 'bg-emerald-500'}`} />
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isDark ? 'bg-[#c5ff7b]' : 'bg-emerald-500'}`} />
                 </span>
               </span>
 
               <div>
-                <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#c5ff7b]">
+                <span className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] ${
+                  isDark ? 'text-[#c5ff7b]' : 'text-emerald-700'
+                }`}>
                   <Sparkles className="w-3 h-3" /> Medication Due Now
                 </span>
                 {activeList.length > 1 && (
-                  <span className="text-[10px] font-bold text-emerald-200/60">
+                  <span className={`text-[10px] font-bold ${
+                    isDark ? 'text-emerald-200/60' : 'text-slate-500'
+                  }`}>
                     Dose {currentIndex + 1} of {activeList.length}
                   </span>
                 )}
@@ -145,7 +172,11 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
               <button
                 type="button"
                 onClick={handleSpeak}
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-200 flex items-center justify-center transition-colors cursor-pointer"
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-white/10 hover:bg-white/20 text-emerald-200'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                }`}
                 title="Play voice announcement"
                 aria-label="Play voice announcement"
               >
@@ -155,7 +186,11 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-200/70 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-white/10 hover:bg-white/20 text-emerald-200/70 hover:text-white'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900'
+                }`}
                 title="Dismiss reminder"
                 aria-label="Dismiss reminder"
               >
@@ -166,28 +201,42 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
 
           {/* Medicine Card Content */}
           <div className="relative mt-4 space-y-3">
-            <div className="flex items-start gap-3.5 bg-black/25 rounded-2xl p-4 border border-white/10">
+            <div className={`flex items-start gap-3.5 rounded-2xl p-4 border ${
+              isDark
+                ? 'bg-black/25 border-white/10'
+                : 'bg-white border-emerald-200/80 shadow-sm'
+            }`}>
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/25">
                 <Pill className="w-6 h-6 -rotate-45" />
               </div>
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-lg font-black tracking-tight truncate text-white">
+                  <h3 className={`text-lg font-black tracking-tight truncate ${
+                    isDark ? 'text-white' : 'text-slate-900'
+                  }`}>
                     {currentItem.name}
                   </h3>
-                  <span className="shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#c5ff7b] text-[#092e24]">
+                  <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                    isDark
+                      ? 'bg-[#c5ff7b] text-[#092e24]'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-200/70'
+                  }`}>
                     {currentItem.dosage}
                   </span>
                 </div>
 
                 <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
-                  <span className="inline-flex items-center gap-1 text-emerald-200 font-bold">
-                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span className={`inline-flex items-center gap-1 font-bold ${
+                    isDark ? 'text-emerald-200' : 'text-emerald-700'
+                  }`}>
+                    <Clock className="w-3.5 h-3.5 text-amber-500" />
                     {currentItem.time}
                   </span>
-                  <span className="text-emerald-400/40">•</span>
-                  <span className="text-emerald-100/75 font-medium truncate">
+                  <span className={isDark ? 'text-emerald-400/40' : 'text-slate-300'}>•</span>
+                  <span className={`font-medium truncate ${
+                    isDark ? 'text-emerald-100/75' : 'text-slate-600'
+                  }`}>
                     {currentItem.timingInstruction}
                   </span>
                 </div>
@@ -199,23 +248,37 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
               <button
                 type="button"
                 onClick={handleEnablePush}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold text-emerald-200 hover:bg-emerald-500/25 transition-colors cursor-pointer"
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-[11px] font-bold transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200 hover:bg-emerald-500/25'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
+                }`}
               >
                 <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#c5ff7b]" /> Enable desktop notifications
+                  <ShieldCheck className={`w-3.5 h-3.5 ${isDark ? 'text-[#c5ff7b]' : 'text-emerald-600'}`} /> Enable desktop notifications
                 </span>
-                <span className="text-[#c5ff7b] underline text-[10px] uppercase tracking-wider">Enable</span>
+                <span className={`underline text-[10px] uppercase tracking-wider ${
+                  isDark ? 'text-[#c5ff7b]' : 'text-emerald-700'
+                }`}>
+                  Enable
+                </span>
               </button>
             )}
 
             {/* Pagination Controls if queue > 1 */}
             {activeList.length > 1 && (
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-200/70 pt-0.5">
+              <div className={`flex items-center justify-between text-xs font-bold pt-0.5 ${
+                isDark ? 'text-emerald-200/70' : 'text-slate-500'
+              }`}>
                 <button
                   type="button"
                   disabled={currentIndex === 0}
                   onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer ${
+                    isDark
+                      ? 'hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent'
+                      : 'hover:bg-slate-200/60 disabled:opacity-30 disabled:hover:bg-transparent text-slate-700'
+                  }`}
                 >
                   <ChevronLeft className="w-3.5 h-3.5" /> Previous dose
                 </button>
@@ -226,7 +289,11 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
                   type="button"
                   disabled={currentIndex === activeList.length - 1}
                   onClick={() => setCurrentIndex((prev) => Math.min(activeList.length - 1, prev + 1))}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer ${
+                    isDark
+                      ? 'hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent'
+                      : 'hover:bg-slate-200/60 disabled:opacity-30 disabled:hover:bg-transparent text-slate-700'
+                  }`}
                 >
                   Next dose <ChevronRight className="w-3.5 h-3.5" />
                 </button>
@@ -240,7 +307,11 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleTake}
-                className="sm:col-span-6 py-3 px-4 rounded-xl bg-[#c5ff7b] hover:bg-[#b5f566] text-[#05231b] font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer"
+                className={`sm:col-span-6 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all ${
+                  isDark
+                    ? 'bg-[#c5ff7b] hover:bg-[#b5f566] text-[#05231b] shadow-emerald-500/20'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
+                }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Mark Taken</span>
@@ -251,10 +322,14 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleSnooze}
-                className="sm:col-span-3 py-3 px-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer"
+                className={`sm:col-span-3 py-3 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border cursor-pointer transition-colors ${
+                  isDark
+                    ? 'bg-white/10 hover:bg-white/15 text-white border-white/10'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                }`}
                 title="Remind again in 10 minutes"
               >
-                <TimerReset className="w-3.5 h-3.5 text-amber-400" />
+                <TimerReset className="w-3.5 h-3.5 text-amber-500" />
                 <span>10m</span>
               </motion.button>
 
@@ -263,7 +338,11 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleSkip}
-                className="sm:col-span-3 py-3 px-2 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:border-rose-500/40 text-emerald-100/70 hover:text-rose-200 font-bold text-xs flex items-center justify-center gap-1 border border-white/5 transition-colors cursor-pointer"
+                className={`sm:col-span-3 py-3 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 border transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-white/5 hover:bg-rose-500/20 hover:border-rose-500/40 text-emerald-100/70 hover:text-rose-200 border-white/5'
+                    : 'bg-rose-50 hover:bg-rose-100 hover:border-rose-300 text-rose-700 border-rose-200'
+                }`}
                 title="Skip this dose today"
               >
                 <XCircle className="w-3.5 h-3.5" />
