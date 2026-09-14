@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowUpRight,
+  Bell,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -28,6 +29,7 @@ interface DashboardProps {
   reports?: MedicalReport[];
   setActiveTab: (tab: string) => void;
   onLogAction: (scheduleId: string, status: 'taken' | 'ignored') => void;
+  onTriggerReminder?: (item?: MedicineScheduleItem) => void;
   theme: 'dark' | 'light';
 }
 
@@ -48,6 +50,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   reports = [],
   setActiveTab,
   onLogAction,
+  onTriggerReminder,
   theme,
 }) => {
   const isDark = theme === 'dark';
@@ -79,9 +82,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {greeting}, {user?.name?.split(' ')[0] || 'there'}.<br />Let&apos;s keep your <span className={isDark ? 'text-[#c5ff7b]' : 'text-emerald-500'}>care in flow.</span>
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className={`hidden rounded-xl border px-3 py-2 text-xs font-bold sm:flex sm:items-center sm:gap-2 ${subduedSurface} ${muted}`}><CalendarDays className="h-3.5 w-3.5" />{formatDate()}</div>
-          <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => setActiveTab('upload')} className="flex items-center gap-2 rounded-xl bg-[#123d35] px-4 py-3 text-xs font-black text-white shadow-lg shadow-emerald-950/15"><Plus className="h-4 w-4 text-[#c5ff7b]" /> Add record</motion.button>
+          <motion.button
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => onTriggerReminder?.(nextDose || activeSchedules[0])}
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-3 text-xs font-bold text-emerald-700 dark:text-[#c5ff7b] hover:bg-emerald-500/20 transition-all cursor-pointer"
+            title="Trigger notification alert pop-up"
+          >
+            <Bell className="h-3.5 w-3.5 text-[#c5ff7b] animate-bounce" />
+            <span>Test Pop-up</span>
+          </motion.button>
+          <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} onClick={() => setActiveTab('upload')} className="flex items-center gap-2 rounded-xl bg-[#123d35] px-4 py-3 text-xs font-black text-white shadow-lg shadow-emerald-950/15 cursor-pointer"><Plus className="h-4 w-4 text-[#c5ff7b]" /> Add record</motion.button>
         </div>
       </motion.section>
 
@@ -106,9 +119,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c5ff7b] text-[#123d35]"><Pill className="h-5 w-5 -rotate-45" /></div>
                   <div><p className="text-lg font-black tracking-[-0.04em]">{nextDose.name}</p><p className="mt-0.5 text-xs font-semibold text-white/60">{nextDose.dosage} · {nextDose.timingInstruction}</p></div>
                 </div>
-                <div className="mt-4 flex items-center justify-between gap-3 sm:mt-0 sm:justify-end">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2.5 sm:mt-0 sm:justify-end">
                   <span className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-[#c5ff7b]"><Clock3 className="mr-1.5 inline h-3.5 w-3.5" />{nextDose.time}</span>
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => onLogAction(nextDose.id, 'taken')} className="rounded-xl bg-[#c5ff7b] px-4 py-2.5 text-xs font-black text-[#123d35]">Mark taken</motion.button>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => onTriggerReminder?.(nextDose)} className="rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-2 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer" title="Preview notification pop-up for this dose"><Bell className="h-3.5 w-3.5 text-[#c5ff7b]" /> Pop-up</motion.button>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => onLogAction(nextDose.id, 'taken')} className="rounded-xl bg-[#c5ff7b] px-4 py-2 text-xs font-black text-[#123d35] cursor-pointer">Mark taken</motion.button>
                 </div>
               </div>
             ) : (

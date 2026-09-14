@@ -26,7 +26,7 @@ import {
   resetCurrentUserData,
 } from './services/storage';
 
-import { requestNotificationPermission, sendDesktopNotification } from './services/notifications';
+import { requestNotificationPermission, parseTimeToMinutes } from './services/notifications';
 import { calculateAdherenceStreak } from './services/adherence';
 
 import type {
@@ -67,6 +67,9 @@ export function App() {
 
   // Reminder Popup State
   const [activeReminder, setActiveReminder] = useState<MedicineScheduleItem | null>(null);
+  const [reminderQueue, setReminderQueue] = useState<MedicineScheduleItem[]>([]);
+  const snoozedUntilRef = useRef<Record<string, number>>({});
+  const dismissedSessionRef = useRef<Set<string>>(new Set());
 
   const todayStr = new Date().toISOString().split('T')[0];
   const currentStreak = calculateAdherenceStreak(adherenceLogs);
@@ -103,39 +106,45 @@ export function App() {
     }
   }, [user?.id]);
 
-  // Background real-time timer checking for scheduled medicine times every 30 seconds
+  // Background real-time timer checking for scheduled medicine times
   useEffect(() => {
     if (!user || schedules.length === 0) return;
 
     const checkReminders = () => {
       const now = new Date();
-      const currentHours = now.getHours();
-      const currentMinutes = now.getMinutes();
-      
-      const period = currentHours >= 12 ? 'PM' : 'AM';
-      const hours12 = currentHours % 12 || 12;
-      const formattedHours = String(hours12).padStart(2, '0');
-      const formattedMinutes = String(currentMinutes).padStart(2, '0');
-      const currentTimeStr = `${formattedHours}:${formattedMinutes} ${period}`;
-
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
       const activeSchedulesList = schedules.filter((s) => s.active);
       const todayLoggedSet = new Set(
         adherenceLogs.filter((l) => l.date === todayStr).map((l) => l.scheduleId)
       );
 
-      const dueSchedule = activeSchedulesList.find(
-        (s) => s.time === currentTimeStr && !todayLoggedSet.has(s.id)
-      );
+      const nowMs = Date.now();
+      const dueSchedules = activeSchedulesList.filter((s) => {
+        if (todayLoggedSet.has(s.id)) return false;
+        const snoozedUntil = snoozedUntilRef.current[s.id];
+        if (snoozedUntil && nowMs < snoozedUntil) return false;
+        if (dismissedSessionRef.current.has(s.id)) return false;
 
-      if (dueSchedule && (!activeReminder || activeReminder.id !== dueSchedule.id)) {
-        setActiveReminder(dueSchedule);
-        sendDesktopNotification(dueSchedule);
+        const schedMinutes = parseTimeToMinutes(s.time);
+        // Due if current time is within 15 minutes before scheduled time or overdue earlier today
+        return currentMinutes >= schedMinutes - 15;
+      });
+
+      if (dueSchedules.length > 0) {
+        setReminderQueue(dueSchedules);
+        setActiveReminder((prev) => {
+          if (prev && dueSchedules.some((item) => item.id === prev.id)) return prev;
+          return dueSchedules[0];
+        });
       }
     };
 
-    const intervalId = setInterval(checkReminders, 30000);
+    // Run check immediately on mount/update
+    checkReminders();
+
+    const intervalId = setInterval(checkReminders, 20000);
     return () => clearInterval(intervalId);
-  }, [user, schedules, adherenceLogs, activeReminder, todayStr]);
+  }, [user, schedules, adherenceLogs, todayStr]);
 
   // Re-compute comparison report when reports state changes
   useEffect(() => {
@@ -226,6 +235,73 @@ export function App() {
       ...prev.filter((l) => !(l.scheduleId === scheduleId && l.date === todayStr)),
       newLog,
     ]);
+
+    // If active reminder is this item, advance queue or close
+    setReminderQueue((prev) => {
+      const nextQueue = prev.filter((item) => item.id !== scheduleId);
+      if (activeReminder?.id === scheduleId) {
+        setActiveReminder(nextQueue[0] || null);
+      }
+      return nextQueue;
+    });
+  };
+
+  const handleSnoozeReminder = (scheduleId: string, minutes: number = 10) => {
+    snoozedUntilRef.current[scheduleId] = Date.now() + minutes * 60 * 1000;
+    setReminderQueue((prev) => {
+      const nextQueue = prev.filter((item) => item.id !== scheduleId);
+      if (activeReminder?.id === scheduleId) {
+        setActiveReminder(nextQueue[0] || null);
+      }
+      return nextQueue;
+    });
+  };
+
+  const handleDismissReminder = () => {
+    if (activeReminder) {
+      dismissedSessionRef.current.add(activeReminder.id);
+    }
+    setActiveReminder(null);
+  };
+
+  const handleTriggerReminder = (targetItem?: MedicineScheduleItem) => {
+    if (targetItem) {
+      delete snoozedUntilRef.current[targetItem.id];
+      dismissedSessionRef.current.delete(targetItem.id);
+      setActiveReminder(targetItem);
+      setReminderQueue([targetItem]);
+      return;
+    }
+
+    const todayLoggedSet = new Set(
+      adherenceLogs.filter((l) => l.date === todayStr).map((l) => l.scheduleId)
+    );
+    const pending = schedules.filter((s) => s.active && !todayLoggedSet.has(s.id));
+
+    if (pending.length > 0) {
+      delete snoozedUntilRef.current[pending[0].id];
+      dismissedSessionRef.current.delete(pending[0].id);
+      setActiveReminder(pending[0]);
+      setReminderQueue(pending);
+    } else if (schedules.length > 0) {
+      setActiveReminder(schedules[0]);
+      setReminderQueue([schedules[0]]);
+    } else {
+      const sampleItem: MedicineScheduleItem = {
+        id: 'sample-reminder-demo',
+        name: 'Vitamin D3 & Calcium',
+        dosage: '1000 IU • 1 Tablet',
+        time: '09:00 AM',
+        timeCategory: 'Morning',
+        timingInstruction: 'Take after breakfast with water',
+        durationDays: 30,
+        remainingDays: 24,
+        startDate: todayStr,
+        active: true,
+      };
+      setActiveReminder(sampleItem);
+      setReminderQueue([sampleItem]);
+    }
   };
 
   // Prescription Uploaded Handler
@@ -297,6 +373,7 @@ export function App() {
         onOpenAuthModal={handleLogout}
         onOpenAccountModal={() => setIsAccountModalOpen(true)}
         onLogout={handleLogout}
+        onOpenReminderModal={() => handleTriggerReminder()}
       />
 
       {/* Main App Workspace */}
@@ -318,6 +395,7 @@ export function App() {
                 reports={reports}
                 setActiveTab={setActiveTab}
                 onLogAction={handleLogAction}
+                onTriggerReminder={handleTriggerReminder}
                 theme={theme}
               />
             )}
@@ -383,8 +461,10 @@ export function App() {
       {/* Floating Reminder Modal */}
       <ReminderModal
         item={activeReminder}
-        onClose={() => setActiveReminder(null)}
+        itemsQueue={reminderQueue}
+        onClose={handleDismissReminder}
         onLogAction={handleLogAction}
+        onSnooze={handleSnoozeReminder}
       />
 
       {/* Subtle Minimal Footer */}

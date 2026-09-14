@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Pill, Activity, Calendar, Upload, BarChart3, LogOut, UserCheck, Sun, Moon, User, FileText } from 'lucide-react';
+import { Pill, Activity, Calendar, Upload, BarChart3, LogOut, UserCheck, Sun, Moon, User, FileText, Bell } from 'lucide-react';
 import type { UserProfile } from '../types';
 
 interface NavbarProps {
@@ -14,6 +14,7 @@ interface NavbarProps {
   onOpenAuthModal: () => void;
   onOpenAccountModal: () => void;
   onLogout: () => void;
+  onOpenReminderModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -27,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuthModal,
   onOpenAccountModal,
   onLogout,
+  onOpenReminderModal,
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'Overview', icon: Activity },
@@ -111,6 +113,30 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Medication Notification Bell */}
+            <motion.button
+              type="button"
+              onClick={onOpenReminderModal}
+              whileTap={{ scale: 0.92 }}
+              whileHover={{ scale: 1.05 }}
+              className={`relative w-9 h-9 rounded-xl flex items-center justify-center border transition-all cursor-pointer ${
+                pendingCount > 0
+                  ? 'bg-emerald-500/20 text-[#c5ff7b] border-emerald-400/50 shadow-sm shadow-emerald-500/20'
+                  : isLight
+                  ? 'bg-slate-100/80 text-slate-600 border-slate-200 hover:bg-slate-200'
+                  : 'bg-white/5 text-emerald-200 border-white/10 hover:bg-white/10'
+              }`}
+              title={pendingCount > 0 ? `${pendingCount} dose reminder${pendingCount > 1 ? 's' : ''} pending` : 'Medication Reminders'}
+              aria-label="Medication Reminders"
+            >
+              <Bell className={`w-4 h-4 ${pendingCount > 0 ? 'text-[#c5ff7b] animate-bounce' : ''}`} />
+              {pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-[#c5ff7b] text-[#092e24] text-[9px] font-black leading-none shadow-sm">
+                  {pendingCount}
+                </span>
+              )}
+            </motion.button>
+
             <motion.button
               type="button"
               onClick={onToggleTheme}
